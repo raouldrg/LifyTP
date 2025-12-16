@@ -2,12 +2,15 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
 import { theme } from "../theme";
 import { FeedCard } from "../components/FeedCard";
+import { useAuth } from "../lib/AuthContext";
 
 export default function HomeScreen({ navigation }: any) {
     const [activeTab, setActiveTab] = useState<"foryou" | "following">("foryou");
 
+    const { user } = useAuth();
+
     // Mock Data matching the design
-    const posts = [
+    const allPosts = [
         {
             id: "1",
             username: "raoul.drg",
@@ -30,6 +33,9 @@ export default function HomeScreen({ navigation }: any) {
         }
     ];
 
+    // Show mock posts only for raouldrg, empty for others
+    const posts = (user?.username === "raouldrg" || user?.email?.includes("raouldrg")) ? allPosts : [];
+
     return (
         <SafeAreaView style={styles.container}>
             {/* Header with Tabs */}
@@ -51,12 +57,20 @@ export default function HomeScreen({ navigation }: any) {
 
             {/* Feed List */}
             <ScrollView contentContainerStyle={styles.listContent}>
-                {posts.map(post => (
-                    <FeedCard
-                        key={post.id}
-                        {...post}
-                    />
-                ))}
+                {posts.length > 0 ? (
+                    posts.map(post => (
+                        <FeedCard
+                            key={post.id}
+                            {...post}
+                        />
+                    ))
+                ) : (
+                    <View style={{ padding: 40, alignItems: "center" }}>
+                        <Text style={{ color: theme.colors.text.secondary, textAlign: "center" }}>
+                            Aucune activité pour le moment.
+                        </Text>
+                    </View>
+                )}
                 <View style={{ height: 80 }} />
             </ScrollView>
         </SafeAreaView>

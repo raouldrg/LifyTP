@@ -10,6 +10,13 @@
       "ios",
       "android"
     ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lify.mobile",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Lify a besoin d'accéder à votre galerie pour changer votre photo de profil."
+      }
+    },
     "web": {
       "bundler": "metro"
     },

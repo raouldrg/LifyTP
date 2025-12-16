@@ -16,10 +16,17 @@ import preferencesRoutes from "./routes/preferences";
 import notificationsRoutes from "./routes/notifications";
 import gamificationRoutes from "./routes/gamification";
 import authRoutes from "./routes/auth";
+import multipart from "@fastify/multipart";
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 const ORIGIN = process.env.API_ORIGIN ?? '*'
 const app = Fastify({ logger: true })
+
+app.register(multipart, {
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  }
+});
 
 // --- Plugins globaux
 await app.register(cors, { origin: ORIGIN === '*' ? true : ORIGIN })

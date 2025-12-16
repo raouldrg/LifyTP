@@ -5,6 +5,12 @@ import { NavigationContainer } from "@react-navigation/native";
 import { CustomTabBar } from "../components/CustomTabBar";
 import LoadingScreen from "../screens/LoadingScreen";
 import LoginScreen from "../screens/LoginScreen";
+import SignUpScreen from "../screens/SignUpScreen";
+import PseudoScreen from "../screens/PseudoScreen";
+import BioScreen from "../screens/BioScreen";
+import AvatarScreen from "../screens/AvatarScreen";
+import SettingsScreen from "../screens/SettingsScreen";
+import { useAuth } from "../lib/AuthContext";
 import HomeScreen from "../screens/HomeScreen";
 import SearchScreen from "../screens/SearchScreen";
 import MessagesScreen from "../screens/MessagesScreen";
@@ -52,7 +58,15 @@ export default function AppNavigator() {
            For now, we default to Login, but you can switch initialRouteName to "Main" 
            to test the tabs directly if "isAuthenticated" logic is added.
          */}
+                {/* Auth Stack */}
                 <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="SignUp" component={SignUpScreen} />
+                <Stack.Screen name="Pseudo" component={PseudoScreen} />
+                <Stack.Screen name="Bio" component={BioScreen} />
+                <Stack.Screen name="Avatar" component={AvatarScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_bottom' }} />
+
+                {/* Main App */}
                 <Stack.Screen name="Main" component={MainTabs} />
             </Stack.Navigator>
         </NavigationContainer>

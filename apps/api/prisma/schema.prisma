@@ -21,7 +21,11 @@ model User {
   provider               String
   providerId             String          @unique
   username               String?         @unique
+  lastUsernameChange     DateTime?
+  passwordHash           String?         
   avatarUrl              String?
+  bio                    String?
+  role                   Role            @default(USER)
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   
@@ -391,4 +395,10 @@ model Streak {
   lastActiveDate DateTime? // dernière activité comptabilisable (événement créé, partage, etc.)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Role {
+  USER
+  ADMIN
+  DEVELOPER
 }

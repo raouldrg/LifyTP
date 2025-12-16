@@ -112,4 +112,51 @@ export default async function uploadRoutes(app: FastifyInstance) {
     const url = await minio.presignedGetObject(m.bucket, m.objectKey, 60 * 5);
     return { url };
   });
+  // Direct Avatar Upload
+  app.post("/uploads/avatar", { preValidation: [requireAuth] }, async (req, reply) => {
+    const data = await req.file();
+    if (!data) return reply.code(400).send({ error: "No file uploaded" });
+
+    const buffer = await data.toBuffer();
+    const userId = (req as any).userId;
+    const ext = data.filename.split(".").pop() || "jpg";
+    const objectKey = `avatars/${userId}/${Date.now()}.${ext}`;
+
+    await minio.putObject(BUCKET, objectKey, buffer, data.file.bytesRead, {
+      'Content-Type': data.mimetype
+    });
+
+    const url = `http://${process.env.MINIO_ENDPOINT}:${process.env.MINIO_PORT}/${BUCKET}/${objectKey}`;
+    // Or presigned if private, but usually avatars are public. 
+    // If local minio, we might return a localhost URL which emulators can't reach.
+    // Better to return relative or handle domain.
+    // For now, let's construct a reachable URL or just return the objectKey and let frontend resolve?
+    // Let's return the full URL assuming the backend knows its public address.
+
+    // Hack for local dev: replace localhost with machine IP if needed, or just rely on MINIO_ENDPOINT
+    // If running in docker/sim, localhost refers to device.
+
+    // To keep it simple: Return the objectKey, and let the frontend ask for a presigned URL or public URL?
+    // Actually, minio presignedGetObject is safer.
+
+    // But user wants "direct" usage. Public bucket policy is best for avatars.
+    // Assuming bucket is public:
+    // const publicUrl = `http://localhost:9000/${BUCKET}/${objectKey}`;
+
+    // Let's save the URL in the user profile directly?
+    // Yes, update user avatarUrl
+
+    // We need a way to serve this. Since it's Minio, we can use presigned GET.
+    // OR we can proxy it.
+
+    // Let's assume public bucket for now or generate long-lived presigned.
+    const publicUrl = await minio.presignedGetObject(BUCKET, objectKey, 7 * 24 * 60 * 60); // 7 days
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: publicUrl }
+    });
+
+    return { url: publicUrl };
+  });
 }

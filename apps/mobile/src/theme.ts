@@ -2,6 +2,7 @@ export const theme = {
     colors: {
         background: "#FDFBF7", // Cream/Off-white
         surface: "#FFFFFF",
+        error: "#FF3B30",
         text: {
             primary: "#1A1A1A",
             secondary: "#666666",

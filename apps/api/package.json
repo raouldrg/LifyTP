@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
+    "@fastify/multipart": "^8.3.0",
     "@prisma/client": "^6.17.1",
     "@socket.io/redis-adapter": "^8.3.0",
+    "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
@@ -25,6 +27,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.11.30",
     "ts-node-dev": "^2.0.0",
