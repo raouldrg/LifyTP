@@ -1,0 +1,30 @@
+{
+  "name": "lify-sprint0",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "prepare": "husky install",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --max-warnings=0",
+    "format": "prettier --write .",
+    "typecheck": "tsc -b",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "dev": "npm run docker:up && concurrently -n api,mobile -c auto \"npm:dev:api\" \"npm:dev:mobile\"",
+    "dev:api": "npm run dev -w @lify/api",
+    "dev:mobile": "npm start -w @lify/mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "eslint": "^9.12.0",
+    "@eslint/js": "^9.12.0",
+    "typescript": "^5.6.3",
+    "prettier": "^3.3.3",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.6"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules
+.DS_Store
+dist
+build
+.env
+.env.*
+.tmp
+.expo
+.expo-shared
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.idea
+.vscode

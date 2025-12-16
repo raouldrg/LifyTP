@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Lify",
+    "slug": "lify-sprint0",
+    "scheme": "lify",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "sdkVersion": "51.0.0",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3000"
+    }
+  }
+}

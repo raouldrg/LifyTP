@@ -1,0 +1,394 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================
+// 🟢 USER & AUTH
+// ==============================
+
+model User {
+  id                     String          @id @default(cuid())
+  email                  String?         @unique
+  provider               String
+  providerId             String          @unique
+  username               String?         @unique
+  avatarUrl              String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  
+  // Relations
+  Event                  Event[]
+  Participant            Participant[]
+  sentFriendRequests     FriendRequest[] @relation("FromUser")
+  receivedFriendRequests FriendRequest[] @relation("ToUser")
+  posts                  Post[]          @relation("UserPosts")
+  comments               Comment[]       @relation("UserComments")
+  likes                  Like[]          @relation("UserLikes")
+  conversationsAsA       Conversation[]  @relation("ConvoUserA")
+  conversationsAsB       Conversation[]  @relation("ConvoUserB")
+  sentMessages           Message[]       @relation("SentMessages")
+  preference             UserPreference?
+  notifications          Notification[]
+
+  // Gamification (back-relations sans nom explicite)
+  userBadges UserBadge[]
+  streak     Streak?
+}
+
+// ==============================
+// 🗓️ EVENTS
+// ==============================
+
+// --- Enums utiles ---
+enum ParticipantRole {
+  HOST
+  GUEST
+}
+
+enum ParticipantStatus {
+  INVITED
+  GOING
+  DECLINED
+}
+
+// --- Modèle Event ---
+model Event {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  startAt      DateTime
+  endAt        DateTime?
+  isPrivate    Boolean   @default(true)
+  coverMediaId String?   @unique
+  coverMedia   Media?    @relation("EventCover", fields: [coverMediaId], references: [id])
+  medias       Media[]   @relation("EventMedias")
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  participants Participant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[] @relation("EventPosts")
+
+  // Back-relation: all linked external events that map to this Event
+  linkedExternalEvents LinkedEvent[] @relation("EventLinkedImports")
+
+  visibility    Visibility     @default(PRIVATE)
+  shareCode     String?        @unique
+  notifications Notification[]
+
+  @@index([ownerId])
+  @@index([startAt])
+}
+
+// ==============================
+// 👥 SOCIAL & POSTS
+// ==============================
+
+// --- Modèle Participant ---
+model Participant {
+  id String @id @default(cuid())
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role   ParticipantRole   @default(GUEST)
+  status ParticipantStatus @default(INVITED)
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId]) // un utilisateur ne peut participer qu’une fois au même event
+  @@index([userId])
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model FriendRequest {
+  id         String              @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  decidedAt  DateTime?
+
+  fromUser User @relation("FromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("ToUser", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, status])
+  @@index([fromUserId, status])
+}
+
+model Post {
+  id       String  @id @default(cuid())
+  content  String
+  authorId String
+  author   User    @relation("UserPosts", fields: [authorId], references: [id])
+  eventId  String?
+  event    Event?  @relation("EventPosts", fields: [eventId], references: [id])
+
+  likes    Like[]
+  comments Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId, createdAt(sort: Desc)])
+  @@index([eventId, createdAt(sort: Desc)])
+  @@index([createdAt, id])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  authorId  String
+  author    User     @relation("UserComments", fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([postId, createdAt(sort: Desc)])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation("UserLikes", fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+}
+
+// ==============================
+// 📸 MEDIA
+// ==============================
+
+model Media {
+  id      String  @id @default(cuid())
+  ownerId String
+  eventId String?
+  event   Event?  @relation("EventMedias", fields: [eventId], references: [id])
+
+  coverOf Event? @relation("EventCover")
+
+  kind         MediaKind
+  bucket       String
+  objectKey    String    @unique
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  durationSec  Int?
+  thumbnailKey String?
+  createdAt    DateTime  @default(now())
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+// ==============================
+// 💬 MESSAGING
+// ==============================
+
+// --- Messagerie 1-to-1 (MVP) ---
+
+model Conversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Paire d'utilisateurs (1-to-1). ⚠️ Toujours trier les IDs (min -> max) côté serveur avant création.
+  userAId String
+  userBId String
+
+  userA    User      @relation("ConvoUserA", fields: [userAId], references: [id])
+  userB    User      @relation("ConvoUserB", fields: [userBId], references: [id])
+  messages Message[]
+
+  @@unique([userAId, userBId], name: "unique_pair") // empêche les doublons A-B / A-B
+  @@index([updatedAt])
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+}
+
+enum CalendarProvider {
+  GOOGLE
+  ICS
+}
+
+enum CalendarStatus {
+  CONNECTED
+  DISCONNECTED
+}
+
+// ==============================
+// 📅 LINKED CALENDARS
+// ==============================
+
+model LinkedCalendar {
+  id          String           @id @default(cuid())
+  userId      String
+  provider    CalendarProvider
+  displayName String?
+  email       String?
+  url         String? // pour ICS
+  timezone    String? // ex: Europe/Paris
+  status      CalendarStatus   @default(CONNECTED)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  events LinkedEvent[]
+
+  @@index([userId])
+}
+
+model LinkedEvent {
+  id               String   @id @default(cuid())
+  linkedCalendarId String
+  externalId       String // UID ICS ou id Google
+  title            String
+  description      String?
+  start            DateTime
+  endAt            DateTime // <-- corrigé
+  locationName     String?
+  lat              Float?
+  lng              Float?
+  sourceUID        String? // iCal UID brut
+  hash             String? // pour dédup rapide
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Lien optionnel vers un Event Lify (si converti ou dédoublonné)
+  lifyEventId String?
+  lifyEvent   Event?  @relation("EventLinkedImports", fields: [lifyEventId], references: [id], onDelete: SetNull)
+
+  calendar LinkedCalendar @relation(fields: [linkedCalendarId], references: [id])
+
+  @@unique([linkedCalendarId, externalId])
+  @@index([start, endAt])
+}
+
+// ==============================
+// 🔔 PREFERENCES & NOTIFICATIONS
+// ==============================
+
+enum Visibility {
+  PRIVATE
+  FRIENDS
+  LINK
+  PUBLIC
+}
+
+model UserPreference {
+  userId                 String     @id
+  notificationOptIn      Boolean    @default(true)
+  defaultEventVisibility Visibility @default(PRIVATE)
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum NotificationType {
+  INVITE
+  REMINDER
+  GENERIC
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String?
+  eventId   String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  event Event? @relation(fields: [eventId], references: [id])
+
+  @@index([userId, read, createdAt])
+}
+
+// ==============================
+// 🎮 GAMIFICATION
+// ==============================
+
+// --- Gamification ---
+
+enum BadgeType {
+  FIRST_EVENT // 1er événement créé
+  FIVE_SHARES // 5 partages envoyés
+  THREE_ACTIVE_WEEKS // 3 semaines actives d’affilée
+  ONBOARDING_COMPLETE // Onboarding terminé (tutoriel + permissions)
+}
+
+model Badge {
+  id          String    @id @default(cuid())
+  type        BadgeType @unique
+  name        String
+  description String
+  icon        String? // URL ou clé d’asset
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userBadges UserBadge[]
+}
+
+model UserBadge {
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model Streak {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  currentStreak  Int       @default(0) // jours consécutifs
+  longestStreak  Int       @default(0)
+  lastActiveDate DateTime? // dernière activité comptabilisable (événement créé, partage, etc.)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
