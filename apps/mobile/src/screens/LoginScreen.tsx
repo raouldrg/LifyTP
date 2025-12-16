@@ -20,15 +20,17 @@ export default function LoginScreen({ navigation }: any) {
         setLoading(true);
         try {
             // 1. Appel API
-            const data = await mockLogin(email);
+            const { user } = await mockLogin(email);
             // data = { accessToken, user: { ... } }
 
             // 2. Navigation vers Home avec les infos user
-            // (Idéalement on stocke le token dans un Context/Store)
-            navigation.replace("Home", { user: data.user });
+            // Mock login for now
+            console.log("Logged in as:", user.username);
+            navigation.replace("Main"); // Navigate to the Tab Navigator
 
         } catch (err: any) {
-            Alert.alert("Login Failed", err.message || "An error occurred");
+            console.error(err);
+            Alert.alert("Error", "Login failed");
         } finally {
             setLoading(false);
         }

@@ -1,52 +1,118 @@
-import React from "react";
-import { View, Text, Button, SafeAreaView, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from "react-native";
+import { theme } from "../theme";
+import { FeedCard } from "../components/FeedCard";
 
-type Props = {
-    // Navigation props can be typed more strictly later
-    navigation: any;
-    route: any;
-};
+export default function HomeScreen({ navigation }: any) {
+    const [activeTab, setActiveTab] = useState<"foryou" | "following">("foryou");
 
-export default function HomeScreen({ navigation, route }: Props) {
-    const { user } = route.params || {};
-
-    function onLogout() {
-        // In a real app we would clear context/storage
-        navigation.replace("Login");
-    }
+    // Mock Data matching the design
+    const posts = [
+        {
+            id: "1",
+            username: "raoul.drg",
+            actionText: "a ajouté une photo à son événement\nLify du 12 nov. 2025",
+            timeAgo: "2 heures",
+            likes: 21000,
+            comments: 12000,
+            shares: 400,
+            imageUrl: "https://via.placeholder.com/400x400", // Will need real image or placeholder
+        },
+        {
+            id: "2",
+            username: "rk_officiel",
+            actionText: "a ajouté un événement à son Lify le\n27 dec. 2027",
+            timeAgo: "1 jour",
+            likes: 5400,
+            comments: 200,
+            shares: 50,
+            hasGradient: true,
+        }
+    ];
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
-                <Text style={styles.title}>Welcome Home 🏠</Text>
-                {user && <Text style={styles.subtitle}>Hello, {user.username}!</Text>}
+            {/* Header with Tabs */}
+            <View style={styles.header}>
+                <Text style={styles.logo}>LIFY<Text style={{ color: theme.colors.accent }}>.</Text></Text>
 
-                <View style={styles.card}>
-                    <Text>Your feed will appear here.</Text>
+                <View style={styles.tabs}>
+                    <TouchableOpacity onPress={() => setActiveTab("foryou")} style={styles.tabContainer}>
+                        <Text style={[styles.tabText, activeTab === "foryou" && styles.activeTabText]}>Pour vous</Text>
+                        {activeTab === "foryou" && <View style={styles.activeLine} />}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => setActiveTab("following")} style={styles.tabContainer}>
+                        <Text style={[styles.tabText, activeTab === "following" && styles.activeTabText]}>Abonnements</Text>
+                        {activeTab === "following" && <View style={styles.activeLine} />}
+                    </TouchableOpacity>
                 </View>
-
-                <Button title="Logout" onPress={onLogout} color="#ff5c5c" />
             </View>
+
+            {/* Feed List */}
+            <ScrollView contentContainerStyle={styles.listContent}>
+                {posts.map(post => (
+                    <FeedCard
+                        key={post.id}
+                        {...post}
+                    />
+                ))}
+                <View style={{ height: 80 }} />
+            </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#f2f2f2" },
-    content: { flex: 1, padding: 24, gap: 16, alignItems: 'center', justifyContent: 'center' },
-    title: { fontSize: 28, fontWeight: "bold", marginBottom: 8 },
-    subtitle: { fontSize: 18, color: "#666", marginBottom: 24 },
-    card: {
-        padding: 20,
-        backgroundColor: "white",
-        borderRadius: 12,
-        width: '100%',
-        alignItems: 'center',
-        marginBottom: 32,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2
+    container: {
+        flex: 1,
+        backgroundColor: theme.colors.background,
+        paddingTop: 10,
+    },
+    header: {
+        alignItems: "center",
+        backgroundColor: theme.colors.background,
+        zIndex: 10,
+    },
+    logo: {
+        fontSize: 24,
+        fontWeight: "900",
+        letterSpacing: 1,
+        marginBottom: 16,
+        color: theme.colors.primary,
+    },
+    tabs: {
+        flexDirection: "row",
+        width: "100%",
+        justifyContent: "space-around",
+        paddingBottom: 0,
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0,0,0,0.05)",
+    },
+    tabContainer: {
+        alignItems: "center",
+        paddingBottom: 8,
+        width: "40%",
+    },
+    tabText: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: theme.colors.text.secondary,
+        marginBottom: 4,
+    },
+    activeTabText: {
+        color: theme.colors.primary,
+        fontWeight: "700",
+    },
+    activeLine: {
+        height: 3,
+        width: "60%",
+        backgroundColor: theme.colors.accent,
+        borderRadius: 2,
+        position: "absolute",
+        bottom: 0,
+    },
+    listContent: {
+        padding: 16,
     }
 });
