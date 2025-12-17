@@ -22,68 +22,63 @@ export default async function messageRoutes(app: FastifyInstance) {
 
     const { userId: me } = req as any;
     const { otherUserId } = req.params as any;
-    const { content, mediaUrl, type } = (req.body as any) || {};
+    const { content, mediaUrl, type, duration, replyToId } = (req.body as any) || {};
 
-    if ((!content || !String(content).trim()) && !mediaUrl) {
-      return reply.code(400).send({ error: "Message content or media is required" });
+    try {
+      if ((!content || !String(content).trim()) && !mediaUrl) {
+        return reply.code(400).send({ error: "Message content or media is required" });
+      }
+
+      // Validate User and Get Conversation
+      const otherUser = await prisma.user.findUnique({ where: { id: otherUserId } });
+      if (!otherUser) return reply.code(404).send({ error: "User not found" });
+
+      const convo = await getOrCreateConversation(me, otherUserId);
+
+      const message = await prisma.message.create({
+        data: {
+          conversation: { connect: { id: convo.id } },
+          sender: { connect: { id: me } },
+          content: content ? String(content).trim() : null,
+          mediaUrl: mediaUrl || null,
+          duration: duration ? Number(duration) : null,
+          type: type || "TEXT",
+          read: false,
+          ...(replyToId ? { replyTo: { connect: { id: replyToId } } } : {}),
+        },
+        include: {
+          sender: true,
+          replyTo: { include: { sender: true } }
+        }
+      });
+
+      // Émission temps réel privée
+      const io = (app as any).io as import("socket.io").Server | undefined;
+      if (io) {
+        const payload = {
+          id: message.id,
+          conversationId: convo.id,
+          senderId: me,
+          recipientId: otherUser.id,
+          content: message.content,
+          mediaUrl: message.mediaUrl,
+          duration: message.duration,
+          type: message.type,
+          replyTo: message.replyTo, // Include reply context
+          createdAt: message.createdAt,
+        };
+
+        // Send to recipient
+        io.to(otherUserId).emit("message:new", payload);
+        // Send to self (for multi-device sync)
+        io.to(me).emit("message:new", payload);
+      }
+
+      return reply.code(201).send({ conversation: convo, message });
+    } catch (e) {
+      console.error("FAILED TO SEND MESSAGE:", e);
+      return reply.code(500).send({ error: "Internal Server Error", details: String(e) });
     }
-    if (otherUserId === me) {
-      return reply.code(400).send({ error: "Cannot message yourself" });
-    }
-
-    const other = await prisma.user.findUnique({ where: { id: otherUserId } });
-    if (!other) return reply.code(404).send({ error: "User not found" });
-
-    // Check mutual follow
-    const myFollow = await prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId: me, followingId: otherUserId } }
-    });
-    const theyFollow = await prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId: otherUserId, followingId: me } }
-    });
-
-    if (!myFollow || !theyFollow) {
-      return reply.code(403).send({ error: "You can only message users where you mutually follow each other." });
-    }
-
-    const convo = await getOrCreateConversation(me, otherUserId);
-
-    const message = await prisma.message.create({
-      data: {
-        conversationId: convo.id,
-        senderId: me,
-        content: content ? String(content).trim() : null,
-        mediaUrl: mediaUrl || null,
-        type: type || "TEXT",
-      },
-    });
-
-    await prisma.conversation.update({
-      where: { id: convo.id },
-      data: { updatedAt: new Date() },
-    });
-
-    // Émission temps réel privée
-    const io = (app as any).io as import("socket.io").Server | undefined;
-    if (io) {
-      const payload = {
-        id: message.id,
-        conversationId: convo.id,
-        senderId: me,
-        recipientId: otherUserId,
-        content: message.content,
-        mediaUrl: message.mediaUrl,
-        type: message.type,
-        createdAt: message.createdAt,
-      };
-
-      // Send to recipient
-      io.to(otherUserId).emit("message:new", payload);
-      // Send to self (for multi-device sync)
-      io.to(me).emit("message:new", payload);
-    }
-
-    return reply.code(201).send({ conversation: convo, message });
   });
 
   // Get Messages
@@ -107,6 +102,9 @@ export default async function messageRoutes(app: FastifyInstance) {
       where: { conversationId: convo.id },
       orderBy: { createdAt: "desc" },
       take: limit + 1,
+      include: {
+        replyTo: { include: { sender: true } }
+      },
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
@@ -118,7 +116,7 @@ export default async function messageRoutes(app: FastifyInstance) {
 
     return reply.send({
       conversationId: convo.id,
-      messages: messages, // Removed reverse()
+      messages: messages,
       nextCursor,
     });
   });
@@ -181,7 +179,36 @@ export default async function messageRoutes(app: FastifyInstance) {
         read: false,
         senderId: { not: me }
       },
-      data: { read: true }
+      data: { read: true, delivered: true } // Read implies delivered
+    });
+
+    // Notify sender that messages are read
+    const io = (app as any).io as import("socket.io").Server | undefined;
+    if (io) {
+      // Find the other user ID (sender of the unread messages)
+      const convo = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { userAId: true, userBId: true }
+      });
+      if (convo) {
+        const otherId = convo.userAId === me ? convo.userBId : convo.userAId;
+        io.to(otherId).emit("message:read", { conversationId, readerId: me });
+      }
+    }
+
+    return { success: true };
+  });
+
+  // Heal Duration (Update duration for existing zero-duration messages)
+  app.patch("/messages/:id/duration", { preHandler: requireAuth }, async (req: any, reply) => {
+    const { id } = req.params;
+    const { duration } = req.body as any;
+
+    if (!duration) return reply.code(400).send({ error: "Duration required" });
+
+    await prisma.message.update({
+      where: { id },
+      data: { duration: Number(duration) }
     });
 
     return { success: true };

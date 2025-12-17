@@ -260,7 +260,14 @@ model Message {
   content        String?     // Nullable if media only
   type           MessageType @default(TEXT)
   mediaUrl       String?
+  duration       Int?        @default(0) // Duration in milliseconds
   read           Boolean     @default(false)
+  delivered      Boolean     @default(false)
+  
+  replyToId      String?
+  replyTo        Message?    @relation("ReplyTo", fields: [replyToId], references: [id])
+  replies        Message[]   @relation("ReplyTo")
+
   createdAt      DateTime    @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

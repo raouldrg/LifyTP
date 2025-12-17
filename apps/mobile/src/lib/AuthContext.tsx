@@ -43,7 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (user?.id) {
-            socket.emit("join", user.id);
+            const joinRoom = () => socket.emit("join", user.id);
+            joinRoom(); // Join immediately
+
+            // Re-join on reconnect
+            socket.on("connect", joinRoom);
+
             fetchUnreadCount();
 
             const handleNewMsg = () => {
@@ -52,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             socket.on("message:new", handleNewMsg);
 
             return () => {
+                socket.off("connect", joinRoom);
                 socket.off("message:new", handleNewMsg);
             };
         }

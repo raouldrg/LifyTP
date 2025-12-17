@@ -3,6 +3,10 @@ import path from "path";
 import fs from "fs";
 import { pipeline } from "stream/promises";
 import { randomUUID } from "crypto";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default async function uploadRoutes(app: FastifyInstance) {
   app.post("/upload", async (req, res) => {

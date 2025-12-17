@@ -20,6 +20,10 @@ import multipart from "@fastify/multipart";
 
 import fastifyStatic from '@fastify/static'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 const ORIGIN = process.env.API_ORIGIN ?? '*'

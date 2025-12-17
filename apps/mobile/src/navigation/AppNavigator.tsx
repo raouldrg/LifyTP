@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { NavigationContainer } from "@react-navigation/native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CustomTabBar } from "../components/CustomTabBar";
 import LoadingScreen from "../screens/LoadingScreen";
 import LoginScreen from "../screens/LoginScreen";
@@ -86,21 +87,23 @@ export default function AppNavigator() {
     }
 
     return (
-        <NavigationContainer>
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-                {/* Auth Stack */}
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="SignUp" component={SignUpScreen} />
-                <Stack.Screen name="Pseudo" component={PseudoScreen} />
-                <Stack.Screen name="Bio" component={BioScreen} />
-                <Stack.Screen name="Avatar" component={AvatarScreen} />
-                <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="Chat" component={ChatScreen} />
-                <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <NavigationContainer>
+                <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    {/* Auth Stack */}
+                    <Stack.Screen name="Login" component={LoginScreen} />
+                    <Stack.Screen name="SignUp" component={SignUpScreen} />
+                    <Stack.Screen name="Pseudo" component={PseudoScreen} />
+                    <Stack.Screen name="Bio" component={BioScreen} />
+                    <Stack.Screen name="Avatar" component={AvatarScreen} />
+                    <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_bottom' }} />
+                    <Stack.Screen name="Chat" component={ChatScreen} />
+                    <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
-                {/* Main App */}
-                <Stack.Screen name="Main" component={MainTabs} />
-            </Stack.Navigator>
-        </NavigationContainer>
+                    {/* Main App */}
+                    <Stack.Screen name="Main" component={MainTabs} />
+                </Stack.Navigator>
+            </NavigationContainer>
+        </GestureHandlerRootView>
     );
 }

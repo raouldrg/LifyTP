@@ -98,7 +98,12 @@ export default function MessagesScreen({ navigation }: any) {
                             <View style={styles.statusContainer}>
                                 <Ionicons name={statusIconName} size={14} color={statusColor} style={{ marginRight: 4, marginTop: 1 }} />
                                 <Text style={[styles.lastMessage, isUnread && styles.unreadMessage]} numberOfLines={1}>
-                                    {isMe ? `Moi : ${lastMessage.content}` : lastMessage.content}
+                                    {isMe ? "Moi : " : ""}
+                                    {lastMessage.type === 'IMAGE'
+                                        ? "📷 Image"
+                                        : lastMessage.type === 'AUDIO'
+                                            ? "🎵 Audio"
+                                            : lastMessage.content}
                                 </Text>
                             </View>
                         ) : (
