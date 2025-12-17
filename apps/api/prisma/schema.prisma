@@ -46,6 +46,23 @@ model User {
   // Gamification (back-relations sans nom explicite)
   userBadges UserBadge[]
   streak     Streak?
+
+  followedBy Follow[] @relation("UserFollowedBy")
+  following  Follow[] @relation("UserFollowing")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowedBy", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
 }
 
 // ==============================

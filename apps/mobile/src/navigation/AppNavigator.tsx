@@ -10,6 +10,7 @@ import PseudoScreen from "../screens/PseudoScreen";
 import BioScreen from "../screens/BioScreen";
 import AvatarScreen from "../screens/AvatarScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import UserProfileScreen from "../screens/UserProfileScreen"; // Added import
 import { useAuth } from "../lib/AuthContext";
 import HomeScreen from "../screens/HomeScreen";
 import SearchScreen from "../screens/SearchScreen";
@@ -17,8 +18,31 @@ import MessagesScreen from "../screens/MessagesScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import { theme } from "../theme";
 
+import UserListScreen from "../screens/UserListScreen";
+
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+
+const SearchStack = createNativeStackNavigator();
+function SearchStackNavigator() {
+    return (
+        <SearchStack.Navigator screenOptions={{ headerShown: false }}>
+            <SearchStack.Screen name="SearchIndex" component={SearchScreen} />
+            <SearchStack.Screen name="UserProfile" component={UserProfileScreen} />
+        </SearchStack.Navigator>
+    );
+}
+
+const ProfileStack = createNativeStackNavigator();
+function ProfileStackNavigator() {
+    return (
+        <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+            <ProfileStack.Screen name="ProfileIndex" component={ProfileScreen} />
+            <ProfileStack.Screen name="UserList" component={UserListScreen} />
+            <ProfileStack.Screen name="UserProfile" component={UserProfileScreen} />
+        </ProfileStack.Navigator>
+    );
+}
 
 function MainTabs() {
     return (
@@ -27,9 +51,9 @@ function MainTabs() {
             screenOptions={{ headerShown: false }}
         >
             <Tab.Screen name="Home" component={HomeScreen} />
-            <Tab.Screen name="Search" component={SearchScreen} />
+            <Tab.Screen name="Search" component={SearchStackNavigator} />
             <Tab.Screen name="Messages" component={MessagesScreen} />
-            <Tab.Screen name="Profile" component={ProfileScreen} />
+            <Tab.Screen name="Profile" component={ProfileStackNavigator} />
         </Tab.Navigator>
     );
 }
@@ -37,7 +61,6 @@ function MainTabs() {
 export default function AppNavigator() {
     // Simulate loading state (or use real auth check later)
     const [isLoading, setIsLoading] = useState(true);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     useEffect(() => {
         // Fake splash delay
@@ -53,11 +76,6 @@ export default function AppNavigator() {
     return (
         <NavigationContainer>
             <Stack.Navigator screenOptions={{ headerShown: false }}>
-                {/* 
-           TODO: Add proper auth check. 
-           For now, we default to Login, but you can switch initialRouteName to "Main" 
-           to test the tabs directly if "isAuthenticated" logic is added.
-         */}
                 {/* Auth Stack */}
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="SignUp" component={SignUpScreen} />

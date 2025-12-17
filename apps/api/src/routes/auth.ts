@@ -261,11 +261,9 @@ export default async function authRoutes(app: FastifyInstance) {
         _count: {
           select: {
             posts: true,
-            // For now, only counting Events created. 
-            // FriendRequests can be used for followers (received) and following (sent) stats later.
             Event: true,
-            sentFriendRequests: true,
-            receivedFriendRequests: true
+            followedBy: true,
+            following: true,
           }
         }
       },
@@ -273,21 +271,13 @@ export default async function authRoutes(app: FastifyInstance) {
 
     if (!user) return reply.code(404).send({ error: "User not found" });
 
-    // Custom stats mapping if needed, or just return _count
-    // The schema has Event, Participant, etc.
-    // Let's rely on _count for Event.
-    // Followers/Following might need a separate query if using FriendRequest logic or just return 0 if not implemented.
-    // The schema has: receivedFriendRequests, sentFriendRequests.
-    // We can count them.
-
     return {
       user: {
         ...user,
         stats: {
           events: user._count.Event,
-          // Approximating followers/following via friend requests for now or just 0
-          followers: 0,
-          following: 0,
+          followers: user._count.followedBy,
+          following: user._count.following,
         }
       }
     };

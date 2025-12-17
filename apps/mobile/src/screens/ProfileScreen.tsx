@@ -5,9 +5,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function ProfileScreen({ navigation }: any) {
-    const { user, signOut } = useAuth();
+    const { user, signOut, refreshUser } = useAuth();
+
+    useFocusEffect(
+        React.useCallback(() => {
+            refreshUser();
+        }, [])
+    );
 
     const handleSettingsPress = () => {
         navigation.navigate("Settings");
@@ -51,14 +58,28 @@ export default function ProfileScreen({ navigation }: any) {
                             <Text style={styles.statValue}>{user?.stats?.events || 0}</Text>
                             <Text style={styles.statLabel}>Events</Text>
                         </View>
-                        <View style={styles.statItem}>
+                        <TouchableOpacity
+                            style={styles.statItem}
+                            onPress={() => navigation.navigate("UserList", {
+                                userId: user?.id,
+                                type: 'followers',
+                                title: 'Abonnés'
+                            })}
+                        >
                             <Text style={styles.statValue}>{user?.stats?.followers || 0}</Text>
                             <Text style={styles.statLabel}>Abonnés</Text>
-                        </View>
-                        <View style={styles.statItem}>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.statItem}
+                            onPress={() => navigation.navigate("UserList", {
+                                userId: user?.id,
+                                type: 'following',
+                                title: 'Suivi(e)s'
+                            })}
+                        >
                             <Text style={styles.statValue}>{user?.stats?.following || 0}</Text>
                             <Text style={styles.statLabel}>Suivi(e)s</Text>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
 

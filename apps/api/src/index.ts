@@ -56,6 +56,9 @@ app.register(authRoutes);
 // ✅ Calendriers (Sprint 7)
 app.register(linkedCalendarsRoutes)
 
+import usersRoutes from "./routes/users";
+app.register(usersRoutes);
+
 // --- Healthcheck
 app.get('/health', async () => ({ ok: true }))
 

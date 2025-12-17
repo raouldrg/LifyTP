@@ -22,6 +22,7 @@ interface AuthContextType {
     isAuthenticated: boolean;
     signIn: (userData: User, token: string) => Promise<void>;
     updateUser: (partialUser: Partial<User>) => void;
+    refreshUser: () => Promise<void>;
     signOut: () => Promise<void>;
 }
 
@@ -46,6 +47,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(prev => prev ? { ...prev, ...partialUser } : null);
     };
 
+    const refreshUser = async () => {
+        if (!token) return;
+        try {
+            const res = await api.get("/me");
+            if (res.data.user) {
+                setUser(res.data.user);
+            }
+        } catch (error) {
+            console.error("Failed to refresh user", error);
+        }
+    };
+
     const signOut = async () => {
         setUser(null);
         setToken(null);
@@ -58,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user,
         signIn,
         updateUser,
+        refreshUser,
         signOut
     };
 
