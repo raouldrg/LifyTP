@@ -180,4 +180,36 @@ export default async function usersRoutes(app: FastifyInstance) {
 
         return following.map(f => f.following);
     });
+
+    // Get Friends (Mutual Follows)
+    app.get("/friends", { preHandler: requireAuth }, async (req: any, reply) => {
+        const { userId: me } = req as any;
+
+        // Find users I follow
+        const following = await prisma.follow.findMany({
+            where: { followerId: me },
+            select: { followingId: true }
+        });
+        const followingIds = following.map(f => f.followingId);
+
+        // Find users who follow me AND are in followingIds
+        const friends = await prisma.follow.findMany({
+            where: {
+                followerId: { in: followingIds },
+                followingId: me
+            },
+            include: {
+                follower: {
+                    select: {
+                        id: true,
+                        username: true,
+                        avatarUrl: true,
+                        bio: true
+                    }
+                }
+            }
+        });
+
+        return friends.map(f => f.follower);
+    });
 }

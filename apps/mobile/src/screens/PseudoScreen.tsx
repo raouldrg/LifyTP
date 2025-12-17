@@ -53,7 +53,7 @@ export default function PseudoScreen({ navigation, route }: any) {
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardView}>
                 <View style={styles.content}>
                     <Text style={styles.logo}>{mode === 'edit' ? "Modifier mon pseudo" : "Bienvenue ! 👋"}</Text>
-                    <Text style={styles.intro}>{mode === 'edit' ? "Attention : changement limité à une fois tous les 3 mois." : "Choisissez votre pseudo unique sur Lify."}</Text>
+                    <Text style={styles.intro}>{mode === 'edit' ? "Attention : changement limité à une fois tous les 3 mois." : <Text>Choisissez votre pseudo unique sur <Text style={{ fontFamily: "MontserratAlternates_700Bold" }}>Lify</Text>.</Text>}</Text>
 
                     <View style={styles.form}>
                         <View style={styles.inputContainer}>

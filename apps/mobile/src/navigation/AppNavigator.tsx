@@ -18,6 +18,8 @@ import MessagesScreen from "../screens/MessagesScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import { theme } from "../theme";
 
+import ChatScreen from "../screens/ChatScreen";
+import NewMessageScreen from "../screens/NewMessageScreen";
 import UserListScreen from "../screens/UserListScreen";
 
 const Tab = createBottomTabNavigator();
@@ -44,6 +46,16 @@ function ProfileStackNavigator() {
     );
 }
 
+const MessagesStack = createNativeStackNavigator();
+function MessagesStackNavigator() {
+    return (
+        <MessagesStack.Navigator screenOptions={{ headerShown: false }}>
+            <MessagesStack.Screen name="MessagesIndex" component={MessagesScreen} />
+            <MessagesStack.Screen name="NewMessage" component={NewMessageScreen} />
+        </MessagesStack.Navigator>
+    );
+}
+
 function MainTabs() {
     return (
         <Tab.Navigator
@@ -52,7 +64,7 @@ function MainTabs() {
         >
             <Tab.Screen name="Home" component={HomeScreen} />
             <Tab.Screen name="Search" component={SearchStackNavigator} />
-            <Tab.Screen name="Messages" component={MessagesScreen} />
+            <Tab.Screen name="Messages" component={MessagesStackNavigator} />
             <Tab.Screen name="Profile" component={ProfileStackNavigator} />
         </Tab.Navigator>
     );
@@ -83,6 +95,8 @@ export default function AppNavigator() {
                 <Stack.Screen name="Bio" component={BioScreen} />
                 <Stack.Screen name="Avatar" component={AvatarScreen} />
                 <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="Chat" component={ChatScreen} />
+                <Stack.Screen name="UserProfile" component={UserProfileScreen} />
 
                 {/* Main App */}
                 <Stack.Screen name="Main" component={MainTabs} />

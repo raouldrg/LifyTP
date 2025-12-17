@@ -65,7 +65,7 @@ export default function SignUpScreen({ navigation }: any) {
                     </TouchableOpacity>
 
                     <Text style={styles.logo}>Inscription</Text>
-                    <Text style={styles.intro}>Rejoignez Lify aujourd'hui.</Text>
+                    <Text style={styles.intro}>Rejoignez <Text style={{ fontFamily: "MontserratAlternates_700Bold" }}>Lify</Text> aujourd'hui.</Text>
 
                     <View style={styles.form}>
                         <View style={styles.inputContainer}>

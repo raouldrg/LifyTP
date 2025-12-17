@@ -1,4 +1,5 @@
 import axios from "axios";
+import { io } from "socket.io-client";
 
 const API_URL = "http://localhost:3000";
 
@@ -6,6 +7,8 @@ export const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
 });
+
+export const socket = io(API_URL);
 
 // Auth
 export async function login(email: string, password: string) {
@@ -50,6 +53,25 @@ export async function uploadAvatar(fileUri: string) {
     },
   });
   return data;
+}
+
+export async function uploadFile(fileUri: string, mimeType: string = "image/jpeg") {
+  const formData = new FormData();
+  const ext = mimeType.split("/")[1] || "bin";
+  const filename = `upload_${Date.now()}.${ext}`;
+
+  formData.append("file", {
+    uri: fileUri,
+    name: filename,
+    type: mimeType,
+  } as any);
+
+  const { data } = await api.post("/upload", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return data; // { url: string, ... }
 }
 
 // Deprecated or Dev

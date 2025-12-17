@@ -5,12 +5,15 @@ import { theme } from "../theme";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 
+import { useAuth } from "../lib/AuthContext";
+
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+    const { unreadCount } = useAuth();
     const [layout, setLayout] = useState({ width: 0, height: 0 });
     const animatedValue = useRef(new Animated.Value(0)).current;
 
     const numberOfTabs = state.routes.length;
-    const tabWidth = layout.width / numberOfTabs;
+    const tabWidth = layout.width ? layout.width / numberOfTabs : 0;
 
     useEffect(() => {
         if (layout.width === 0) return;
@@ -18,8 +21,8 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
         Animated.spring(animatedValue, {
             toValue: state.index * tabWidth,
             useNativeDriver: true,
-            friction: 9,
-            tension: 60,
+            friction: 12,
+            tension: 50,
         }).start();
     }, [state.index, layout.width]);
 
@@ -32,7 +35,7 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 
     return (
         <View style={styles.containerPointerEvents}>
-            <BlurView intensity={80} tint="light" style={styles.blurContainer}>
+            <BlurView intensity={95} tint="light" style={styles.blurContainer}>
                 <View style={styles.container} onLayout={handleLayout}>
                     {/* Animated Bubble Indicator */}
                     {layout.width > 0 && (
@@ -85,9 +88,12 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
                                 <View style={[styles.iconContainer, isFocused && styles.activeIconContainer]}>
                                     <Ionicons
                                         name={iconName}
-                                        size={28}
-                                        color={isFocused ? "#FFFFFF" : theme.colors.text.secondary}
+                                        size={24}
+                                        color={isFocused ? theme.colors.accent : "rgba(60, 60, 67, 0.5)"}
                                     />
+                                    {route.name === "Messages" && unreadCount > 0 && (
+                                        <View style={styles.badge} />
+                                    )}
                                 </View>
                             </TouchableOpacity>
                         );
@@ -101,28 +107,30 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
 const styles = StyleSheet.create({
     containerPointerEvents: {
         position: 'absolute',
-        bottom: 30,
-        left: 20,
-        right: 20,
+        bottom: 34,
+        left: 30,
+        right: 30,
         alignItems: 'center',
-    },
-    blurContainer: {
-        borderRadius: 35,
-        overflow: 'hidden',
-        width: '100%',
         shadowColor: "#000",
         shadowOffset: {
             width: 0,
-            height: 10,
+            height: 4,
         },
         shadowOpacity: 0.15,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowRadius: 15,
+        elevation: 8,
+    },
+    blurContainer: {
+        borderRadius: 30,
+        overflow: 'hidden',
+        width: '100%',
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.3)", // Glass edge effect
     },
     container: {
         flexDirection: "row",
-        height: 70,
-        backgroundColor: "rgba(255, 255, 255, 0.1)", // Much more transparent
+        height: 60,
+        backgroundColor: "rgba(255, 255, 255, 0.2)", // More transparent for liquid feel
         alignItems: "center",
         justifyContent: "space-around",
     },
@@ -134,10 +142,12 @@ const styles = StyleSheet.create({
         zIndex: 2, // Ensure icons are above bubble
     },
     iconContainer: {
-        padding: 8,
+        padding: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     activeIconContainer: {
-        // No explicit style changes needed, icon color does the job
+        // Optional: Add subtle glow or scale ref wanted
     },
     activeBubble: {
         position: "absolute",
@@ -149,10 +159,25 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     bubbleShape: {
-        width: 50, // Slightly improved shape size
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: "#FFA500",
-        opacity: 0.8, // Increased opacity to make white icon visible
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: "rgba(255, 255, 255, 0.7)", // High opacity white, no border
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    badge: {
+        position: "absolute",
+        top: 8,
+        right: 8,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: "#FF3B30", // Active system red
+        borderWidth: 1.5,
+        borderColor: "#FFFFFF"
     }
 });

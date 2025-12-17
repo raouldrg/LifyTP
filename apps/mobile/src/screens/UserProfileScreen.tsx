@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     },
     username: {
         fontSize: 18,
-        fontWeight: "700",
+        fontFamily: "MontserratAlternates_700Bold",
         color: theme.colors.text.primary,
     },
     profileInfo: {

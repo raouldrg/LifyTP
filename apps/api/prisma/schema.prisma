@@ -254,16 +254,25 @@ model Conversation {
 }
 
 model Message {
-  id             String   @id @default(cuid())
+  id             String      @id @default(cuid())
   conversationId String
   senderId       String
-  content        String
-  createdAt      DateTime @default(now())
+  content        String?     // Nullable if media only
+  type           MessageType @default(TEXT)
+  mediaUrl       String?
+  read           Boolean     @default(false)
+  createdAt      DateTime    @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("SentMessages", fields: [senderId], references: [id])
 
   @@index([conversationId, createdAt])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
 }
 
 enum CalendarProvider {

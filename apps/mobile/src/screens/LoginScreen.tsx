@@ -116,11 +116,12 @@ const styles = StyleSheet.create({
     content: { flex: 1, justifyContent: "center", padding: 24 },
     logo: {
         fontSize: 48,
-        fontWeight: "900",
+        fontFamily: "MontserratAlternates_700Bold",
         color: theme.colors.primary,
         textAlign: "center",
         marginBottom: 8,
         letterSpacing: 1
+        // Removed fontWeight as fontFamily handles it
     },
     intro: {
         fontSize: 18,

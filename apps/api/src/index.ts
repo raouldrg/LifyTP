@@ -18,9 +18,17 @@ import gamificationRoutes from "./routes/gamification";
 import authRoutes from "./routes/auth";
 import multipart from "@fastify/multipart";
 
+import fastifyStatic from '@fastify/static'
+import path from 'path'
+
 const PORT = Number(process.env.API_PORT ?? 3000)
 const ORIGIN = process.env.API_ORIGIN ?? '*'
 const app = Fastify({ logger: true })
+
+app.register(fastifyStatic, {
+  root: path.join(__dirname, '..', 'uploads'),
+  prefix: '/uploads/', // optional: default '/'
+})
 
 app.register(multipart, {
   limits: {

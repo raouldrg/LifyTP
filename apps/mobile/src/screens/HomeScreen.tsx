@@ -90,10 +90,11 @@ const styles = StyleSheet.create({
     },
     logo: {
         fontSize: 24,
-        fontWeight: "900",
+        fontFamily: "MontserratAlternates_700Bold",
         letterSpacing: 1,
         marginBottom: 16,
         color: theme.colors.primary,
+        // Removed fontWeight
     },
     tabs: {
         flexDirection: "row",

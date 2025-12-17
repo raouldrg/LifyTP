@@ -98,9 +98,14 @@ export default function SearchScreen({ navigation }: any) {
         }
     };
 
-    const handleUserPress = (user: any) => {
-        saveRecent(user);
-        navigation.navigate("UserProfile", { userId: user.id });
+    const handleUserPress = (resultUser: any) => {
+        saveRecent(resultUser);
+        if (resultUser.id === user?.id) {
+            // Navigate to the Profile tab -> ProfileIndex
+            navigation.navigate("Profile", { screen: "ProfileIndex" });
+        } else {
+            navigation.navigate("UserProfile", { userId: resultUser.id });
+        }
     };
 
     const renderItem = ({ item }: any) => (

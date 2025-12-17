@@ -26,6 +26,11 @@ export async function setupSocketIO(app: FastifyInstance) {
   }
 
   io.on("connection", (socket) => {
+    socket.on("join", (userId) => {
+      socket.join(userId);
+      // app.log.info(`Socket joined room: ${userId}`);
+    });
+
     socket.on("message", (data) => {
       io.emit("message", data);
     });

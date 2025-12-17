@@ -62,11 +62,10 @@ const styles = StyleSheet.create({
     },
     logo: {
         fontSize: 48,
-        fontWeight: "700",
+        fontFamily: "MontserratAlternates_700Bold",
         color: theme.colors.text.primary, // Dark text
         marginBottom: 40,
         letterSpacing: 2,
-        fontFamily: "System",
     },
     dot: {
         color: theme.colors.accent,
