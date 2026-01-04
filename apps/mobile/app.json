@@ -5,7 +5,6 @@
     "scheme": "lify",
     "version": "0.1.0",
     "orientation": "portrait",
-    "sdkVersion": "51.0.0",
     "platforms": [
       "ios",
       "android"
@@ -14,7 +13,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.lify.mobile",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Lify a besoin d'accéder à votre galerie pour changer votre photo de profil."
+        "NSPhotoLibraryUsageDescription": "Lify a besoin d'accéder à votre galerie pour changer votre photo de profil.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "web": {
@@ -22,6 +24,10 @@
     },
     "extra": {
       "apiUrl": "http://localhost:3000"
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store"
+    ]
   }
 }

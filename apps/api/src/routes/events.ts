@@ -14,12 +14,14 @@ export default async function eventRoutes(app: FastifyInstance) {
     const { userId } = req as any;
 
     try {
-      const { title, description, startAt, endAt, isPrivate } = req.body as {
+      const { title, description, startAt, endAt, isPrivate, themeId, colorHex } = req.body as {
         title: string;
         description?: string;
         startAt: string;
         endAt?: string;
         isPrivate?: boolean;
+        themeId?: string;
+        colorHex?: string;
       };
 
       const event = await prisma.event.create({
@@ -30,7 +32,8 @@ export default async function eventRoutes(app: FastifyInstance) {
           endAt: endAt ? new Date(endAt) : null,
           isPrivate: isPrivate ?? true,
           ownerId: userId,
-          // visibility est gérée côté DB (default PRIVATE via Prisma)
+          themeId: themeId || null,
+          colorHex: colorHex || null,
         },
       });
 
@@ -81,8 +84,9 @@ export default async function eventRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      const { title, description, startAt, endAt, isPrivate } = (req.body ?? {}) as {
+      const { title, description, startAt, endAt, isPrivate, themeId, colorHex } = (req.body ?? {}) as {
         title?: string; description?: string; startAt?: string; endAt?: string | null; isPrivate?: boolean;
+        themeId?: string | null; colorHex?: string | null;
       };
 
       const existing = await prisma.event.findFirst({ where: { id, ownerId: userId }, select: { id: true } });
@@ -96,6 +100,8 @@ export default async function eventRoutes(app: FastifyInstance) {
           ...(startAt !== undefined ? { startAt: new Date(startAt) } : {}),
           ...(endAt !== undefined ? { endAt: endAt ? new Date(endAt) : null } : {}),
           ...(isPrivate !== undefined ? { isPrivate } : {}),
+          ...(themeId !== undefined ? { themeId } : {}),
+          ...(colorHex !== undefined ? { colorHex } : {}),
         },
       });
 
@@ -435,5 +441,71 @@ export default async function eventRoutes(app: FastifyInstance) {
     });
 
     return { ok: true, status };
+  });
+
+  // 📰 Feed: Events from ME + followed users
+  app.get("/feed/events", async (req, reply) => {
+    await requireAuth(req, reply);
+    if ((reply as any).sent) return;
+
+    const { userId } = req as any;
+    const { cursor, limit = "10" } = (req.query as any) ?? {};
+    const take = Math.min(parseInt(String(limit) || "10"), 50);
+
+    // 1. Get users I follow
+    const following = await prisma.follow.findMany({
+      where: { followerId: userId },
+      select: { followingId: true },
+    });
+    const followingIds = following.map((f) => f.followingId);
+
+    // 2. Build source user IDs: ME + followed users
+    const sourceUserIds = [userId, ...followingIds];
+
+    console.log(`[Feed] viewerId: ${userId}`);
+    console.log(`[Feed] followingIds (${followingIds.length}): [${followingIds.slice(0, 5).join(", ")}${followingIds.length > 5 ? "..." : ""}]`);
+    console.log(`[Feed] sourceUserIds (${sourceUserIds.length}): [${sourceUserIds.slice(0, 5).join(", ")}${sourceUserIds.length > 5 ? "..." : ""}]`);
+
+    // 3. Fetch ALL events from sourceUserIds (no visibility filter for now)
+    const events = await prisma.event.findMany({
+      where: {
+        ownerId: { in: sourceUserIds },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+      ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : {}),
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        startAt: true,
+        endAt: true,
+        colorHex: true,
+        themeId: true,
+        createdAt: true,
+        ownerId: true,
+        owner: {
+          select: {
+            id: true,
+            username: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    // Debug log first 3 events
+    console.log(`[Feed] Found ${events.length} events. First 3:`, events.slice(0, 3).map(e => ({
+      id: e.id.substring(0, 8),
+      ownerId: e.ownerId.substring(0, 8),
+      title: e.title,
+      themeId: e.themeId
+    })));
+
+    const hasMore = events.length > take;
+    const items = hasMore ? events.slice(0, take) : events;
+    const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+    return reply.send({ items, nextCursor });
   });
 }

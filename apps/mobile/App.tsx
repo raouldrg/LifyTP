@@ -1,7 +1,9 @@
 import React, { useCallback } from "react";
 import AppNavigator from "./src/navigation/AppNavigator";
-import { AuthProvider } from "./src/lib/AuthContext";
+import { AuthProvider } from "./src/context/AuthContext";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import {
   useFonts,
   MontserratAlternates_400Regular,
@@ -18,7 +20,7 @@ import {
 import { View, ActivityIndicator } from "react-native";
 
 export default function App() {
-  let [fontsLoaded] = useFonts({
+  const [fontsLoaded] = useFonts({
     MontserratAlternates_400Regular,
     MontserratAlternates_500Medium,
     MontserratAlternates_600SemiBold,
@@ -38,10 +40,14 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <AppNavigator />
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <AppNavigator />
+          </AuthProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
+    </GestureHandlerRootView>
   );
 }

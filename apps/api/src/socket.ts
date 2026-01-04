@@ -2,6 +2,11 @@ import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import { FastifyInstance } from "fastify";
+import jwt from "jsonwebtoken";
+
+interface AuthPayload {
+  sub: string;
+}
 
 export async function setupSocketIO(app: FastifyInstance) {
   const io = new Server(app.server, {
@@ -23,12 +28,44 @@ export async function setupSocketIO(app: FastifyInstance) {
     app.log.info("✅ Redis Adapter connected");
   } catch (e) {
     app.log.warn("⚠️ Redis not available, falling back to in-memory Socket.io");
+    app.log.warn("⚠️ Redis not available, falling back to in-memory Socket.io");
   }
 
+  // === MIDDLEWARE: AUTHENTICATION ===
+  io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+
+    if (!token) {
+      return next(new Error("Unauthorized: No token provided"));
+    }
+
+    try {
+      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as AuthPayload;
+      // Attach userId to socket for easy access
+      (socket as any).userId = payload.sub;
+      next();
+    } catch (err) {
+      return next(new Error("Unauthorized: Invalid token"));
+    }
+  });
+
   io.on("connection", (socket) => {
-    socket.on("join", (userId) => {
+    const userId = (socket as any).userId;
+    // Auto-join user room on connection
+    if (userId) {
       socket.join(userId);
-      // app.log.info(`Socket joined room: ${userId}`);
+      // app.log.info(`Socket authenticated & auto-joined: ${userId}`);
+    }
+
+    socket.on("join", (requestedId) => {
+      // Redundant if we auto-join, but kept for compatibility or specific room logic?
+      // Ideally we restrict joining OTHER user rooms. 
+      // For now, allow compatibility but we rely on auto-join.
+      if (requestedId === userId) {
+        socket.join(requestedId);
+      } else {
+        // Optional: warn or block joining other user's room
+      }
     });
 
     socket.on("message", (data) => {

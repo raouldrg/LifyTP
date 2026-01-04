@@ -7,7 +7,15 @@
     "moduleResolution": "Bundler",
     "allowJs": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "lib": [
+      "esnext"
+    ],
+    "types": [
+      "node",
+      "react",
+      "react-native"
+    ]
   },
   "include": [
     "**/*.ts",

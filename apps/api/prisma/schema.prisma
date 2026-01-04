@@ -21,10 +21,14 @@ model User {
   provider               String
   providerId             String          @unique
   username               String?         @unique
+  displayName            String?
   lastUsernameChange     DateTime?
+  lastDisplayNameChange  DateTime?
   passwordHash           String?         
   avatarUrl              String?
+  avatarColor            String?
   bio                    String?
+  isPrivate              Boolean         @default(false)
   role                   Role            @default(USER)
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -39,6 +43,7 @@ model User {
   likes                  Like[]          @relation("UserLikes")
   conversationsAsA       Conversation[]  @relation("ConvoUserA")
   conversationsAsB       Conversation[]  @relation("ConvoUserB")
+  conversationParticipants ConversationParticipant[]  // Soft-delete per user
   sentMessages           Message[]       @relation("SentMessages")
   preference             UserPreference?
   notifications          Notification[]
@@ -49,6 +54,12 @@ model User {
 
   followedBy Follow[] @relation("UserFollowedBy")
   following  Follow[] @relation("UserFollowing")
+  
+  refreshTokens RefreshToken[]
+
+  // Follow Requests (private profiles)
+  sentFollowRequests     FollowRequest[] @relation("FollowRequestsSent")
+  receivedFollowRequests FollowRequest[] @relation("FollowRequestsReceived")
 }
 
 model Follow {
@@ -63,6 +74,27 @@ model Follow {
   @@unique([followerId, followingId])
   @@index([followerId])
   @@index([followingId])
+}
+
+enum FollowRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model FollowRequest {
+  id          String              @id @default(cuid())
+  requesterId String
+  targetId    String
+  status      FollowRequestStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  requester User @relation("FollowRequestsSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  target    User @relation("FollowRequestsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, targetId])
+  @@index([targetId, status])
 }
 
 // ==============================
@@ -92,6 +124,10 @@ model Event {
   coverMediaId String?   @unique
   coverMedia   Media?    @relation("EventCover", fields: [coverMediaId], references: [id])
   medias       Media[]   @relation("EventMedias")
+
+  // Theme support
+  themeId      String?
+  colorHex     String?
 
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -234,6 +270,13 @@ enum MediaKind {
 // 💬 MESSAGING
 // ==============================
 
+// Conversation status for message request feature
+enum ConversationStatus {
+  NORMAL    // Regular conversation (public profile or following)
+  REQUEST   // Message request (private profile, not following)
+  REJECTED  // Request was rejected by receiver
+}
+
 // --- Messagerie 1-to-1 (MVP) ---
 
 model Conversation {
@@ -245,12 +288,48 @@ model Conversation {
   userAId String
   userBId String
 
-  userA    User      @relation("ConvoUserA", fields: [userAId], references: [id])
-  userB    User      @relation("ConvoUserB", fields: [userBId], references: [id])
-  messages Message[]
+  // Message request status
+  status             ConversationStatus @default(NORMAL)
+  
+  // Request tracking (for private profile requests)
+  requestSenderId    String?           // Who sent the first message (A)
+  requestReceiverId  String?           // Who received the request (B - private profile)
+  requestCreatedAt   DateTime?         // When REQUEST was created
+  requestAcceptedAt  DateTime?         // When accepted
+  requestRejectedAt  DateTime?         // When rejected
+  
+  // Legacy field (kept for compatibility)
+  initiatedByUserId  String?           // Same as requestSenderId
 
-  @@unique([userAId, userBId], name: "unique_pair") // empêche les doublons A-B / A-B
+  // Last message info for quick access
+  lastMessageAt      DateTime?         // When last message was sent
+  lastMessagePreview String?           // Preview of last message content
+
+  userA        User      @relation("ConvoUserA", fields: [userAId], references: [id])
+  userB        User      @relation("ConvoUserB", fields: [userBId], references: [id])
+  messages     Message[]
+  participants ConversationParticipant[]  // Per-user soft-delete tracking
+
+  @@unique([userAId, userBId], name: "unique_pair")
   @@index([updatedAt])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@index([requestReceiverId])
+}
+
+// Per-user conversation state (supports soft-delete per participant)
+model ConversationParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  userId         String
+  lastDeletedAt  DateTime? // When user "deleted" (hid) this conversation
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -268,12 +347,30 @@ model Message {
   replyTo        Message?    @relation("ReplyTo", fields: [replyToId], references: [id])
   replies        Message[]   @relation("ReplyTo")
 
+  editedAt       DateTime?   // Null if never edited
+  deletedAt      DateTime?   // Soft delete timestamp
+  
   createdAt      DateTime    @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("SentMessages", fields: [senderId], references: [id])
+  reactions    MessageReaction[]
 
   @@index([conversationId, createdAt])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId]) // 1 reaction per user per message
+  @@index([messageId])
 }
 
 enum MessageType {
@@ -434,4 +531,17 @@ enum Role {
   USER
   ADMIN
   DEVELOPER
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

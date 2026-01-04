@@ -1,1027 +1,1021 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Image, PanResponder, Animated, ScrollView } from "react-native";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+    View,
+    Text,
+    StyleSheet,
+    FlatList,
+    TextInput,
+    TouchableOpacity,
+    Platform,
+    Image,
+    Keyboard,
+    Clipboard,
+    Alert,
+    ScrollView,
+    NativeSyntheticEvent,
+    NativeScrollEvent,
+    StatusBar,
+    InteractionManager,
+} from "react-native";
 import { theme } from "../theme";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { api, socket } from "../lib/api";
-import { useAuth } from "../lib/AuthContext";
-import { formatDistanceToNow } from "date-fns";
+import { resolveImageUrl, api } from "../services/api";
+import { useAuth } from "../context/AuthContext";
+import { isSameDay } from "date-fns";
+import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
-import { uploadFile } from "../lib/api";
-import { AudioMessage } from "../components/AudioMessage";
-import { Waveform } from "../components/Waveform";
+import * as ImagePicker from "expo-image-picker";
+import { useAudioRecording } from "../hooks/useAudioRecording";
 import ImageView from "react-native-image-viewing";
-import * as MediaLibrary from 'expo-media-library';
-import { Alert } from "react-native";
-import { Swipeable } from 'react-native-gesture-handler';
+import * as MediaLibrary from "expo-media-library";
+import * as Haptics from "expo-haptics";
+import { useAnimatedStyle } from "react-native-reanimated";
+import {
+    KeyboardStickyView,
+    useReanimatedKeyboardAnimation,
+} from "react-native-keyboard-controller";
 
-// Separate component to handle Swipeable refs and layout
-const MessageItem = React.memo(({ item, user, onReply, onImagePress, onLongPress, highlighted, scrollToMessage, getStatusText }: any) => {
-    const isMe = item.senderId === user?.id;
-    const swipeableRef = useRef<Swipeable>(null);
-    const highlightAnim = useRef(new Animated.Value(0)).current;
+// Chat components
+import {
+    ChatMessageItem,
+    ChatReplyBanner,
+    ChatContextMenu,
+    ChatDaySeparator,
+    ChatInputBar,
+    ChatHeader,
+    ChatMessageList,
+    Message,
+    MessageReaction,
+    ListItem,
+} from "../components/chat";
 
-    useEffect(() => {
-        if (highlighted) {
-            // Reset
-            highlightAnim.setValue(1);
-            // Sequence: Wait 2s, then Fade out over 1s
-            Animated.sequence([
-                Animated.delay(2000),
-                Animated.timing(highlightAnim, {
-                    toValue: 0,
-                    duration: 1000,
-                    useNativeDriver: false // Specific for color
-                })
-            ]).start();
-        } else {
-            // If not highlighted (or toggled off), ensure we are at 0
-            // But we rarely toggle off manually unless scrolling to another
-            // highlightAnim.setValue(0); 
-        }
-    }, [highlighted]);
-
-    const backgroundColor = highlightAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [
-            isMe ? theme.colors.primary : "#F0F0F0",
-            theme.colors.accent
-        ]
-    });
-
-    const renderRightActions = (progress: any, dragX: any) => {
-        return (
-            <View style={{ width: 80, justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="reply" size={24} color={theme.colors.text.secondary} />
-            </View>
-        );
-    };
-
-    const renderLeftActions = (progress: any, dragX: any) => {
-        // Timestamp reveal logic (Drag Left -> Right side revealed)
-        // Actually, typically Timestamp is on the right side of the screen when swiping left.
-        // If I drag LEFT, I see content from the RIGHT. So this is renderRightActions.
-        // Wait, the user said: "glisser le message vers la gauche... l'heure exacte tout a droite".
-        // Dragging LEFT reveals RIGHT actions.
-        return (
-            <View style={{ justifyContent: 'center', paddingHorizontal: 10 }}>
-                <Text style={{ fontSize: 10, color: '#888' }}>
-                    {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-            </View>
-        );
-    };
-
-    // User requested "glisser à droite" (Drag Right) -> Reply.
-    // Drag Right reveals LEFT actions.
-
-    const renderReplyAction = () => (
-        <View style={{ width: 60, justifyContent: 'center', alignItems: 'flex-start', paddingLeft: 10 }}>
-            <Ionicons name="arrow-undo" size={24} color={theme.colors.primary} />
-        </View>
-    );
-
-    const renderTimestampAction = () => (
-        <View style={{ width: 60, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 10 }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: theme.colors.text.secondary }}>
-                {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-        </View>
-    );
-
-
-    const renderReplyContext = (reply: any) => {
-        if (!reply) return null;
-        const isReplyYours = reply.sender.id === user?.id;
-        return (
-            <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => scrollToMessage(reply.id)}
-                style={[styles.replyContextBubble, { backgroundColor: isMe ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)' }]}
-            >
-                <View style={[styles.replyBar, { backgroundColor: isReplyYours ? theme.colors.primary : '#888' }]} />
-                <View style={{ flex: 1 }}>
-                    <Text style={styles.replySender}>{isReplyYours ? "Vous" : reply.sender.username}</Text>
-                    <Text numberOfLines={1} style={styles.replyTextPreview}>
-                        {reply.type === 'IMAGE' ? '📷 Photo' : reply.type === 'AUDIO' ? '🎵 Audio' : reply.content}
-                    </Text>
-                </View>
-            </TouchableOpacity>
-        );
-    };
-
-    return (
-        <Swipeable
-            ref={swipeableRef}
-            renderLeftActions={renderReplyAction} // Drag Right -> Reply
-            renderRightActions={renderTimestampAction} // Drag Left -> Timestamp
-            onSwipeableLeftOpen={() => {
-                onReply(item);
-                swipeableRef.current?.close(); // Auto-close
-            }}
-            overshootLeft={false}
-            overshootRight={false}
-        >
-            <View style={[styles.messageContainer, isMe ? styles.myContainer : styles.theirContainer]}>
-                <Animated.View style={[
-                    styles.messageBubble,
-                    isMe ? styles.myMessage : styles.theirMessage,
-                    item.type === 'IMAGE' && { padding: 4 },
-                    { backgroundColor } // Animated background
-                ]}>
-                    {/* Reply Context */}
-                    {item.replyTo && renderReplyContext(item.replyTo)}
-
-                    {item.type === 'IMAGE' ? (
-                        <View style={{ marginBottom: 4 }}>
-                            <TouchableOpacity onPress={() => onImagePress(item.mediaUrl)}>
-                                <Image
-                                    source={{ uri: item.mediaUrl.startsWith("http") ? item.mediaUrl : `http://localhost:3000${item.mediaUrl}` }}
-                                    style={{ width: 220, height: 220, borderRadius: 16, margin: 4 }}
-                                    resizeMode="cover"
-                                />
-                            </TouchableOpacity>
-                            {item.content ? (
-                                <Text style={[styles.messageText, { marginTop: 4, paddingHorizontal: 8 }, isMe ? styles.myMessageText : styles.theirMessageText]}>
-                                    {item.content}
-                                </Text>
-                            ) : null}
-                        </View>
-                    ) : item.type === 'AUDIO' ? (
-                        <AudioMessage uri={item.mediaUrl} isMe={isMe} initialDuration={item.duration || 0} messageId={item.id} />
-                    ) : (
-                        <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
-                            {item.content}
-                        </Text>
-                    )}
-                </Animated.View >
-                {/* Status always visible but typically small. User asked for Swipe to reveal exact time. 
-                    We keep status here but maybe user implies they want ONLY status on swipe? 
-                    Let's keep existing status (Sent 5m ago) as is, and swipe shows EXACT time (14:32).
-                */}
-                <Text style={[styles.timeText, isMe ? styles.myTimeText : styles.theirTimeText]}>
-                    {getStatusText(item)}
-                </Text>
-            </View >
-        </Swipeable>
-    );
-});
+// Chat hooks
+import {
+    useChatMessages,
+    useChatInput,
+    useChatActions,
+    useChatOptimistic,
+    useChatSocket,
+} from "../hooks/chat";
 
 export default function ChatScreen({ route, navigation }: any) {
     const { user, fetchUnreadCount } = useAuth();
-    const { otherUser } = route.params;
-    const [messages, setMessages] = useState<any[]>([]);
-    const [inputText, setInputText] = useState("");
-    const [loading, setLoading] = useState(true);
-    const flatListRef = useRef<FlatList>(null);
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [recording, setRecording] = useState<Audio.Recording | null>(null);
-    const [recordingLevels, setRecordingLevels] = useState<number[]>(new Array(30).fill(0));
-    const [permissionResponse, requestPermission] = Audio.usePermissions();
-    // Robust State Machine for Recording: 'IDLE' | 'STARTING' | 'RECORDING' | 'STOPPING'
-    const recordingStateRef = useRef<'IDLE' | 'STARTING' | 'STOPPING_REQUESTED' | 'RECORDING'>('IDLE');
-    const recordingInstanceRef = useRef<Audio.Recording | null>(null);
-    const [isCanceling, setIsCanceling] = useState(false);
-    const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+    const { otherUser, conversationStatus: initialStatus, isRequest: initialIsRequest, isInitiator } = route.params;
 
-    const scrollToMessage = (messageId: string) => {
-        const index = messages.findIndex(m => m.id === messageId);
-        if (index !== -1) {
-            flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-            setHighlightedMessageId(messageId);
-            // Keep state true long enough for animation (2s hold + 1s fade)
-            setTimeout(() => setHighlightedMessageId(null), 3500);
-        }
-    };
+    // Message request state (NORMAL, REQUEST, or REJECTED)
+    const [conversationStatus, setConversationStatus] = useState<'NORMAL' | 'REQUEST' | 'REJECTED'>(initialStatus || 'NORMAL');
+    const [isAccepting, setIsAccepting] = useState(false);
+    const [isRejecting, setIsRejecting] = useState(false);
 
-    // PanResponder for Slide to Cancel
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: () => {
-                startRecording();
-            },
-            onPanResponderMove: (_, gestureState) => {
-                // If dragged left significantly
-                if (gestureState.dx < -100) {
-                    setIsCanceling(true);
-                } else {
-                    setIsCanceling(false);
-                }
-            },
-            onPanResponderRelease: (_, gestureState) => {
-                if (gestureState.dx < -100) {
-                    cancelRecording();
-                } else {
-                    stopRecording();
-                }
-                setIsCanceling(false);
-            },
-            onPanResponderTerminate: () => {
-                cancelRecording();
-                setIsCanceling(false);
-            },
-        })
-    ).current;
+    // Derived states for UI
+    const isRequest = conversationStatus === 'REQUEST';
+    const isRejected = conversationStatus === 'REJECTED';
+    const canSendMessage = conversationStatus === 'NORMAL' || (isRequest && isInitiator);
 
-    useEffect(() => {
-        fetchAndMark();
+    // ========================================
+    // HOOKS INITIALIZATION
+    // ========================================
 
-        const handleNewMessage = (msg: any) => {
-            console.log("Socket received message:", msg);
-            // Check if message belongs to this conversation (either from me to them, or them to me)
-            if (
-                (msg.senderId === user?.id && msg.recipientId === otherUser.id) ||
-                (msg.senderId === otherUser.id && msg.recipientId === user?.id)
-            ) {
-                setMessages(prev => {
-                    if (prev.some(m => m.id === msg.id)) return prev;
-                    return [msg, ...prev];
+    // Messages hook
+    const {
+        messages,
+        isLoadingInitial: loading,
+        isLoadingMore: fetchingMore,
+        conversationId,
+        fetchMessages,
+        loadMore: loadMoreMessages,
+        refresh,
+        syncMissedMessages,
+        upsertMessage,
+        updateMessage,
+        markMessageEdited,
+        markMessageDeleted,
+        setMessages,
+    } = useChatMessages({
+        otherUserId: otherUser.id,
+    });
+
+    // Input hook
+    const inputRef = useRef<TextInput | null>(null);
+    const {
+        inputText,
+        setInputText,
+        replyingTo,
+        startReply,
+        cancelReply,
+        editingMessage,
+        startEdit,
+        cancelEdit,
+        clearInput,
+    } = useChatInput({ inputRef });
+
+    // Actions hook (with throttled markRead)
+    const {
+        sendTextMessage,
+        sendImageMessages,
+        sendAudioMessage,
+        editMessage,
+        deleteMessage,
+        addReaction,
+        removeReaction,
+        markConversationRead,
+    } = useChatActions({
+        otherUserId: otherUser.id,
+        userId: user?.id || "",
+        conversationId,
+        fetchUnreadCount,
+        onMessageUpdated: updateMessage,
+        // Handle lazy conversation creation on first message
+        onConversationCreated: (newConvoId, newStatus, newIsInitiator) => {
+            console.log('[ChatScreen] Conversation created:', { newConvoId, newStatus, newIsInitiator });
+            setConversationStatus(newStatus);
+        },
+    });
+
+    // Optimistic updates hook
+    const {
+        createOptimisticTextMessage,
+        createOptimisticAudioMessage,
+        reconcileOptimistic,
+        markOptimisticError,
+    } = useChatOptimistic({
+        userId: user?.id || "",
+        otherUsername: otherUser.username,
+    });
+
+    // Socket hook
+    useChatSocket({
+        userId: user?.id || "",
+        otherUserId: otherUser.id,
+        conversationId,
+        onNewMessage: (msg) => {
+            // Check if it's potentially replacing an optimistic message
+            if (msg.senderId === user?.id) {
+                // Remove any 'sending' optimistic messages for own messages
+                setMessages((prev) => {
+                    if (prev.some((m) => m.id === msg.id)) return prev;
+                    const filtered = prev.filter((m) => m.status !== "sending");
+                    return [{ ...msg, status: "sent" }, ...filtered];
                 });
-
-                // If sent by OTHER, we must ACK it (Delivered)
-                if (msg.senderId === otherUser.id) {
-                    socket.emit("message:ack", { messageId: msg.id, userId: msg.senderId });
-                    // Also mark as read since we are on the screen? 
-                    // Ideally yes, but we rely on fetchAndMark / focus. 
-                    // For now ACK is enough for "Double Grey". 
-                    // "Double Blue" is handled by markAsRead API calling.
-                }
+            } else {
+                // Other user's message
+                upsertMessage(msg);
             }
-        };
+        },
+        onMessageEdited: markMessageEdited,
+        onMessageDeleted: markMessageDeleted,
+        onMessagesRead: () => {
+            // Update our sent messages to show as read
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.senderId === user?.id ? { ...m, read: true, status: "read" } : m
+                )
+            );
+        },
+        onSyncMissedMessages: syncMissedMessages,
+        markAsRead: markConversationRead,
+    });
 
-        const handleMessageUpdated = (updatedMsg: any) => {
-            console.log("Message Updated", updatedMsg);
-            setMessages(prev => prev.map(m => m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m));
-        };
-
-        const handleMessageRead = ({ conversationId: cid, readerId }: any) => {
-            if (cid === conversationId || cid === undefined) { // Simplify: if we are here, assume updates apply
-                // Mark all MY messages as read
-                setMessages(prev => prev.map(m => (m.senderId === user?.id) ? { ...m, read: true, delivered: true } : m));
-            }
-        };
-
-        socket.on("message:new", handleNewMessage);
-        socket.on("message:updated", handleMessageUpdated);
-        socket.on("message:read", handleMessageRead);
-
-        return () => {
-            socket.off("message:new", handleNewMessage);
-            socket.off("message:updated", handleMessageUpdated);
-            socket.off("message:read", handleMessageRead);
-        };
-    }, [otherUser.id, conversationId, user?.id]);
-
-    const fetchMessages = async () => {
-        try {
-            const res = await api.get(`/messages/with/${otherUser.id}`);
-            setMessages(res.data.messages);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const markAsRead = async (convoId: string) => {
-        try {
-            await api.post(`/messages/read/${convoId}`);
-        } catch (e) {
-            console.error("Failed to mark messages as read:", e);
-        }
-    };
-
-    const [nextCursor, setNextCursor] = useState<string | null>(null);
-    const [fetchingMore, setFetchingMore] = useState(false);
-
-    // Refactored fetch to get ID
-    const fetchAndMark = async () => {
-        try {
-            const res = await api.get(`/messages/with/${otherUser.id}`);
-            setMessages(res.data.messages);
-            setNextCursor(res.data.nextCursor);
-
-            if (res.data.conversationId) {
-                setConversationId(res.data.conversationId);
-                await api.post(`/messages/read/${res.data.conversationId}`);
-                // Refresh global unread count immediately
-                fetchUnreadCount();
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    const loadMoreMessages = async () => {
-        if (!nextCursor || fetchingMore) return;
-        setFetchingMore(true);
-        try {
-            const res = await api.get(`/messages/with/${otherUser.id}?cursor=${nextCursor}`);
-            setMessages(prev => [...prev, ...res.data.messages]);
-            setNextCursor(res.data.nextCursor);
-        } catch (error) {
-            console.error("Failed to load more messages", error);
-        } finally {
-            setFetchingMore(false);
-        }
-    };
-
-
+    // ========================================
+    // LOCAL STATE
+    // ========================================
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
     const [sending, setSending] = useState(false);
-    const [replyingTo, setReplyingTo] = useState<any | null>(null);
 
-    // Image Viewer Logic
+    // Scroll state
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const [newMessageCount, setNewMessageCount] = useState(0);
+
+    // Context menu state
+    const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
+    const [contextMenuPosition, setContextMenuPosition] = useState<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null>(null);
+
+    // Audio recording
+    const recording = useAudioRecording();
+
+    // Image viewer
     const [isViewerVisible, setIsViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-    const viewersImages = messages
-        .filter(m => m.type === 'IMAGE')
-        .map(m => ({ uri: m.mediaUrl.startsWith("http") ? m.mediaUrl : `http://localhost:3000${m.mediaUrl}` }));
+    // Refs
+    const flatListRef = useRef<FlatList | null>(null);
 
-    const saveImage = async (uri: string) => {
-        try {
-            const { status } = await MediaLibrary.requestPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert("Permission refusée", "Nous avons besoin de votre permission pour enregistrer les images.");
-                return;
+    // ========================================
+    // EFFECTS
+    // ========================================
+
+    // Initial fetch + mark as read
+    useEffect(() => {
+        fetchMessages().then(() => {
+            if (conversationId) {
+                markConversationRead();
             }
-            await MediaLibrary.saveToLibraryAsync(uri);
-            Alert.alert("Succès", "Image enregistrée dans la galerie ! 📸");
-        } catch (error) {
-            console.error(error);
-            Alert.alert("Erreur", "Impossible d'enregistrer l'image.");
+        });
+    }, [fetchMessages]);
+
+    // Mark as read when conversationId becomes available
+    useEffect(() => {
+        if (conversationId) {
+            markConversationRead();
         }
-    };
+    }, [conversationId, markConversationRead]);
 
-    const ImageFooter = ({ imageIndex }: { imageIndex: number }) => {
-        const image = viewersImages[imageIndex];
-        return (
-            <View style={styles.footerContainer}>
-                <TouchableOpacity style={styles.downloadButton} onPress={() => saveImage(image.uri)}>
-                    <Ionicons name="download-outline" size={24} color="#fff" />
-                    <Text style={styles.downloadText}>Enregistrer dans la galerie</Text>
-                </TouchableOpacity>
-            </View>
+    // Auto-scroll when keyboard appears
+    useEffect(() => {
+        const keyboardShowListener = Keyboard.addListener(
+            Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+            () => {
+                requestAnimationFrame(() => {
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                });
+            }
         );
-    };
 
-    const sendMessage = async () => {
+        return () => {
+            keyboardShowListener.remove();
+        };
+    }, []);
+
+    // Auto-scroll on new messages (from me or when at bottom)
+    useEffect(() => {
+        if (messages.length > 0) {
+            const latest = messages[0];
+            if (latest.senderId === user?.id || isAtBottom) {
+                requestAnimationFrame(() => {
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                });
+            }
+        }
+    }, [messages, user?.id, isAtBottom]);
+
+    // ========================================
+    // LIST DATA WITH DAY SEPARATORS
+    // ========================================
+    const listData = useMemo((): ListItem[] => {
+        if (messages.length === 0) return [];
+
+        const result: ListItem[] = [];
+
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            const msgDate = new Date(msg.createdAt);
+
+            result.push({ type: "message", data: msg });
+
+            const nextMsg = messages[i + 1];
+            if (nextMsg) {
+                const nextDate = new Date(nextMsg.createdAt);
+                if (!isSameDay(msgDate, nextDate)) {
+                    result.push({
+                        type: "separator",
+                        date: msgDate,
+                        key: `sep-${msg.id}`,
+                    });
+                }
+            } else {
+                result.push({
+                    type: "separator",
+                    date: msgDate,
+                    key: `sep-${msg.id}`,
+                });
+            }
+        }
+
+        return result;
+    }, [messages]);
+
+    // Image viewer data
+    const viewerImages = useMemo(
+        () =>
+            messages
+                .filter((m) => m.type === "IMAGE" && m.mediaUrl)
+                .map((m) => ({ uri: resolveImageUrl(m.mediaUrl) || "" })),
+        [messages]
+    );
+
+    // ========================================
+    // HANDLERS
+    // ========================================
+
+    const formatTime = useCallback((dateStr: string) => {
+        const date = new Date(dateStr);
+        return format(date, "HH:mm", { locale: fr });
+    }, []);
+
+    // Scroll handlers
+    const handleScroll = useCallback(
+        (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            const offsetY = event.nativeEvent.contentOffset.y;
+            const atBottom = offsetY < 50;
+            setIsAtBottom(atBottom);
+            if (atBottom) {
+                setNewMessageCount(0);
+            }
+        },
+        []
+    );
+
+    const scrollToBottom = useCallback(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setNewMessageCount(0);
+    }, []);
+
+    const scrollToMessage = useCallback(
+        (messageId: string) => {
+            const index = listData.findIndex(
+                (item) => item.type === "message" && item.data.id === messageId
+            );
+            if (index !== -1 && flatListRef.current) {
+                flatListRef.current.scrollToIndex({
+                    index,
+                    animated: true,
+                    viewPosition: 0.5,
+                });
+            }
+        },
+        [listData]
+    );
+
+    // Send message (or save edit)
+    const handleSendMessage = useCallback(async () => {
+        // If editing, save the edit
+        if (editingMessage) {
+            if (!inputText.trim()) return;
+            const success = await editMessage(editingMessage.id, inputText);
+            if (success) {
+                cancelEdit();
+            }
+            return;
+        }
+
         if (!inputText.trim() && selectedImages.length === 0) return;
 
         const content = inputText.trim();
         const pendingImages = [...selectedImages];
+        const replyToId = replyingTo?.id;
 
-        // Optimistic clear
+        // Clear input immediately
         setInputText("");
         setSelectedImages([]);
+        cancelReply();
+        Keyboard.dismiss();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
         try {
             setSending(true);
 
-            // Scenario 1: Text Only
             if (pendingImages.length === 0) {
-                await api.post(`/messages/to/${otherUser.id}`, {
-                    content,
-                    type: 'TEXT',
-                    replyToId: replyingTo?.id
-                });
-            }
-            // Scenario 2: Images (with optional text on first one)
-            else {
-                for (let i = 0; i < pendingImages.length; i++) {
-                    const uri = pendingImages[i];
-                    // Upload
-                    const { url } = await uploadFile(uri, "image/jpeg");
+                // Text only - add optimistic message
+                const optimisticMsg = createOptimisticTextMessage(content, replyingTo);
+                setMessages((prev) => [optimisticMsg, ...prev]);
 
-                    // Attach content ONLY to the first image
-                    const msgContent = (i === 0 && content) ? content : null;
-
-                    await api.post(`/messages/to/${otherUser.id}`, {
-                        content: msgContent,
-                        type: 'IMAGE',
-                        mediaUrl: url,
-                        replyToId: (i === 0 && replyingTo) ? replyingTo.id : null // Only thread the first image if replying
+                // Auto-scroll
+                requestAnimationFrame(() => {
+                    InteractionManager.runAfterInteractions(() => {
+                        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
                     });
-                }
+                });
+
+                await sendTextMessage(content, replyToId);
+            } else {
+                // Images
+                await sendImageMessages(pendingImages, content, replyToId);
             }
-
-            setReplyingTo(null); // Clear reply state
-
         } catch (error) {
-            console.error(error);
-            alert("Failed to send message");
+            console.error("[ChatScreen] Send error:", error);
+            // Mark optimistic as error
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.status === "sending" ? { ...m, status: "error" } : m
+                )
+            );
         } finally {
             setSending(false);
         }
-    };
+    }, [
+        editingMessage,
+        inputText,
+        selectedImages,
+        replyingTo,
+        setInputText,
+        cancelReply,
+        cancelEdit,
+        editMessage,
+        createOptimisticTextMessage,
+        setMessages,
+        sendTextMessage,
+        sendImageMessages,
+    ]);
 
-    const pickImage = async () => {
+    // Pick image
+    const pickImage = useCallback(async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.7,
-            allowsMultipleSelection: true, // Enable multiple selection
-            selectionLimit: 5, // Reasonable limit
+            allowsMultipleSelection: true,
+            selectionLimit: 5,
         });
 
         if (!result.canceled) {
-            const newUris = result.assets.map(asset => asset.uri);
-            setSelectedImages(prev => [...prev, ...newUris]);
+            setSelectedImages((prev) => [
+                ...prev,
+                ...result.assets.map((a) => a.uri),
+            ]);
         }
-    };
+    }, []);
 
-    const removeImage = (indexToRemove: number) => {
-        setSelectedImages(prev => prev.filter((_, index) => index !== indexToRemove));
-    };
+    const removeImage = useCallback((index: number) => {
+        setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+    }, []);
 
-    const startRecording = async () => {
-        if (recordingStateRef.current !== 'IDLE') return;
-        recordingStateRef.current = 'STARTING';
+    // Audio recording
+    const startRecording = useCallback(async () => {
+        await recording.startRecording();
+    }, [recording]);
 
-        try {
-            if (permissionResponse?.status !== 'granted') {
-                console.log("Requesting permission..");
-                await requestPermission();
-            }
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true,
+    const cancelRecording = useCallback(async () => {
+        await recording.cancelRecording();
+    }, [recording]);
+
+    const lockRecording = useCallback(async () => {
+        await recording.lockRecording();
+    }, [recording]);
+
+    const stopRecording = useCallback(async () => {
+        const result = await recording.stopRecording();
+        if (!result) return;
+
+        const { uri, durationMs } = result;
+
+        const msg = await sendAudioMessage(uri, durationMs);
+        if (msg) {
+            await recording.markSent(msg.id);
+
+            requestAnimationFrame(() => {
+                InteractionManager.runAfterInteractions(() => {
+                    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                });
             });
+        }
+    }, [recording, sendAudioMessage]);
 
-            console.log("Starting recording..");
-            const { recording: newRecording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY,
-                (status) => {
-                    if (status.isRecording && status.metering !== undefined) {
-                        const db = status.metering;
-                        // Normalize dB (-160 to 0) to 0-1. Usually speech is around -40 to 0.
-                        // Let's take -60 as roughly 0 level.
-                        const level = Math.max(0, (db + 60) / 60);
-                        setRecordingLevels(prev => [...prev.slice(1), level]);
-                    }
-                },
-                100 // Update every 100ms
+    // Save image
+    const saveImage = useCallback(async (uri: string) => {
+        try {
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== "granted") {
+                Alert.alert("Permission refusée");
+                return;
+            }
+            await MediaLibrary.saveToLibraryAsync(uri);
+            Alert.alert("Succès", "Image enregistrée ! 📸");
+        } catch (error) {
+            Alert.alert("Erreur", "Impossible d'enregistrer l'image");
+        }
+    }, []);
+
+    // Reply handler
+    const handleReply = useCallback(
+        (message: Message) => {
+            startReply(message);
+        },
+        [startReply]
+    );
+
+    // Long press handler
+    const handleLongPress = useCallback(
+        (
+            message: Message,
+            position: { x: number; y: number; width: number; height: number }
+        ) => {
+            setContextMenuMessage(message);
+            setContextMenuPosition(position);
+        },
+        []
+    );
+
+    // Context menu actions
+    const handleSelectReaction = useCallback(
+        async (emoji: string) => {
+            if (!contextMenuMessage) return;
+
+            const myReaction = contextMenuMessage.reactions?.find(
+                (r) => r.userId === user?.id
             );
 
-            // Critical check: Did user ask to stop while we were initializing?
-            // TS thinks it's still STARTING, but it might have changed async
-            if ((recordingStateRef.current as string) === 'STOPPING_REQUESTED') {
-                console.log("Stop was requested during start, cleaning up immediately.");
-                await newRecording.stopAndUnloadAsync();
-                recordingStateRef.current = 'IDLE';
-                return;
-            }
-
-            recordingInstanceRef.current = newRecording;
-            setRecording(newRecording);
-            recordingStateRef.current = 'RECORDING';
-            console.log("Recording started");
-        } catch (err) {
-            console.error("Failed to start recording", err);
-            recordingStateRef.current = 'IDLE';
-        }
-    };
-
-    const cancelRecording = async () => {
-        if (recordingStateRef.current === 'STARTING') {
-            recordingStateRef.current = 'STOPPING_REQUESTED';
-            return;
-        }
-        if (recordingInstanceRef.current) {
-            try {
-                await recordingInstanceRef.current.stopAndUnloadAsync();
-            } catch (e) { console.log(e); }
-        }
-        setRecording(null);
-        recordingInstanceRef.current = null;
-        setRecordingLevels(new Array(30).fill(0));
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-        recordingStateRef.current = 'IDLE';
-        console.log("Recording cancelled");
-    };
-
-    const stopRecording = async () => {
-        if (recordingStateRef.current === 'IDLE') return;
-
-        if (recordingStateRef.current === 'STARTING') {
-            recordingStateRef.current = 'STOPPING_REQUESTED';
-            return;
-        }
-
-        // Mark as stopping so specific logic can't re-trigger
-        // But we assume if it's RECORDING it's safe to stop
-
-        const rec = recordingInstanceRef.current;
-        if (!rec) {
-            recordingStateRef.current = 'IDLE';
-            return;
-        }
-
-        try {
-            // Check duration
-            const status = await rec.getStatusAsync();
-            if (status.durationMillis < 500) {
-                console.log("Recording too short, discarding.");
-                await rec.stopAndUnloadAsync();
-                setRecording(null);
-                recordingInstanceRef.current = null;
-                setRecordingLevels(new Array(30).fill(0));
-                recordingStateRef.current = 'IDLE';
-                return;
-            }
-
-            // Capture duration before unloading
-            const duration = status.durationMillis;
-            await rec.stopAndUnloadAsync();
-            const uri = rec.getURI();
-
-            setRecording(null);
-            recordingInstanceRef.current = null;
-            setRecordingLevels(new Array(30).fill(0));
-            console.log("Recording stopped and stored at", uri, "Duration:", duration);
-            recordingStateRef.current = 'IDLE'; // Reset state BEFORE upload to allow new recording while uploading
-
-            if (uri && duration > 500) {
-                try {
-                    const { url } = await uploadFile(uri, "audio/m4a");
-                    await api.post(`/messages/to/${otherUser.id}`, {
-                        mediaUrl: url,
-                        type: 'AUDIO',
-                        duration
-                    });
-                } catch (err) {
-                    console.error("Audio upload failed", err);
-                    alert("Echec de l'envoi de l'audio");
+            if (myReaction?.emoji === emoji) {
+                // Remove reaction
+                await removeReaction(contextMenuMessage.id);
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m.id === contextMenuMessage.id
+                            ? {
+                                ...m,
+                                reactions: m.reactions?.filter(
+                                    (r) => r.userId !== user?.id
+                                ),
+                            }
+                            : m
+                    )
+                );
+            } else {
+                // Add reaction
+                const newReaction = await addReaction(contextMenuMessage.id, emoji);
+                if (newReaction) {
+                    setMessages((prev) =>
+                        prev.map((m) => {
+                            if (m.id !== contextMenuMessage.id) return m;
+                            const existingReactions =
+                                m.reactions?.filter((r) => r.userId !== user?.id) || [];
+                            return {
+                                ...m,
+                                reactions: [...existingReactions, newReaction],
+                            };
+                        })
+                    );
                 }
             }
+        },
+        [contextMenuMessage, user?.id, addReaction, removeReaction, setMessages]
+    );
 
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-            });
-        } catch (error) {
-            console.error("Failed to stop recording", error);
-            recordingStateRef.current = 'IDLE';
+    const handleCopy = useCallback(() => {
+        if (contextMenuMessage?.content) {
+            Clipboard.setString(contextMenuMessage.content);
         }
-    };
+    }, [contextMenuMessage]);
 
-    const getStatusText = (item: any) => {
-        const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true, locale: fr });
-        if (item.senderId !== user?.id) return timeAgo;
+    const handleContextReply = useCallback(() => {
+        if (contextMenuMessage) {
+            handleReply(contextMenuMessage);
+        }
+    }, [contextMenuMessage, handleReply]);
 
-        if (item.read) return `Vu ${timeAgo}`;
-        if (item.delivered) return `Délivré ${timeAgo}`;
-        return `Envoyé ${timeAgo}`;
-    };
+    const handleDelete = useCallback(async () => {
+        if (!contextMenuMessage) return;
 
-    // renderReplyContext moved inside MessageItem
+        const originalContent = contextMenuMessage.content;
 
-    const renderItem = ({ item }: any) => {
-        return (
-            <MessageItem
-                item={item}
-                user={user}
-                onReply={setReplyingTo}
-                onImagePress={(url: string) => {
-                    const finalUrl = url.startsWith("http") ? url : `http://localhost:3000${url}`;
-                    const index = viewersImages.findIndex(img => img.uri === finalUrl);
-                    setCurrentImageIndex(index !== -1 ? index : 0);
-                    setIsViewerVisible(true);
-                }}
-                highlighted={highlightedMessageId === item.id}
-                scrollToMessage={scrollToMessage}
-                getStatusText={getStatusText}
-            />
-        );
-    };
+        // Optimistic delete
+        markMessageDeleted(contextMenuMessage.id);
 
-    return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={styles.headerInfo}
-                    onPress={() => navigation.navigate("UserProfile", { userId: otherUser.id })}
-                >
-                    <Image
-                        source={{ uri: otherUser.avatarUrl || `https://ui-avatars.com/api/?name=${otherUser.username}&background=random&size=64` }}
-                        style={styles.avatar}
-                    />
-                    <Text style={styles.headerTitle}>{otherUser.username}</Text>
-                </TouchableOpacity>
-                <View style={{ width: 40 }} />
-            </View>
+        const success = await deleteMessage(contextMenuMessage, () => {
+            // Rollback
+            updateMessage(contextMenuMessage.id, {
+                deletedAt: null,
+                content: originalContent,
+            });
+        });
+    }, [contextMenuMessage, markMessageDeleted, deleteMessage, updateMessage]);
 
-            {loading ? (
-                <View style={styles.center}>
-                    <ActivityIndicator size="large" color={theme.colors.primary} />
-                </View>
-            ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    style={{ flex: 1 }}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.listContent}
-                    inverted
-                    onEndReached={loadMoreMessages}
-                    onEndReachedThreshold={0.3}
-                    ListFooterComponent={fetchingMore ? <ActivityIndicator size="small" color={theme.colors.primary} /> : null}
-                    onScrollToIndexFailed={info => {
-                        const wait = new Promise(resolve => setTimeout(resolve, 500));
-                        wait.then(() => {
-                            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
-                        });
-                    }}
+    const handleEdit = useCallback(() => {
+        if (contextMenuMessage && contextMenuMessage.type === "TEXT") {
+            startEdit(contextMenuMessage);
+        }
+    }, [contextMenuMessage, startEdit]);
+
+    // Image press handler
+    const handleImagePress = useCallback(
+        (url: string) => {
+            const finalUrl = resolveImageUrl(url) || "";
+            const index = viewerImages.findIndex((img) => img.uri === finalUrl);
+            setCurrentImageIndex(index !== -1 ? index : 0);
+            setIsViewerVisible(true);
+        },
+        [viewerImages]
+    );
+
+    // ========================================
+    // RENDER ITEM
+    // ========================================
+
+    const { lastSentMessageId, mostRecentMessageId } = useMemo(() => {
+        const lastSent = messages.find((m) => m.senderId === user?.id);
+        const mostRecent = messages.length > 0 ? messages[0].id : null;
+        return {
+            lastSentMessageId: lastSent?.id,
+            mostRecentMessageId: mostRecent,
+        };
+    }, [messages, user?.id]);
+
+    const renderItem = useCallback(
+        ({ item }: { item: ListItem }) => {
+            if (item.type === "separator") {
+                return <ChatDaySeparator date={item.date} />;
+            }
+
+            const isMe = item.data.senderId === user?.id;
+            const isLastSentMessage = isMe && item.data.id === lastSentMessageId;
+            const isMostRecentMessage = item.data.id === mostRecentMessageId;
+
+            return (
+                <ChatMessageItem
+                    message={item.data}
+                    isMe={isMe}
+                    isLastSentMessage={isLastSentMessage}
+                    isMostRecentMessage={isMostRecentMessage}
+                    formatTime={formatTime}
+                    onImagePress={handleImagePress}
+                    onReply={handleReply}
+                    onLongPress={handleLongPress}
+                    onReplyTap={scrollToMessage}
+                    currentUserId={user?.id}
                 />
-            )}
+            );
+        },
+        [
+            user?.id,
+            lastSentMessageId,
+            mostRecentMessageId,
+            formatTime,
+            handleImagePress,
+            handleReply,
+            handleLongPress,
+            scrollToMessage,
+        ]
+    );
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                keyboardVerticalOffset={0}
-            >
-                {/* Reply Preview Bar */}
-                {replyingTo && (
-                    <View style={styles.replyBarContainer}>
-                        <View style={styles.replyBarContent}>
-                            <View style={[styles.replyBarLine, { backgroundColor: replyingTo.senderId === user?.id ? theme.colors.primary : '#888' }]} />
-                            <View style={{ marginLeft: 8, flex: 1 }}>
-                                <Text style={styles.replyBarSender}>
-                                    Réponse à {replyingTo.senderId === user?.id ? "vous" : (replyingTo.sender?.username || "l'utilisateur")}
-                                </Text>
-                                <Text numberOfLines={1} style={styles.replyBarText}>
-                                    {replyingTo.type === 'IMAGE' ? '📷 Photo' : replyingTo.type === 'AUDIO' ? '🎵 Audio' : replyingTo.content}
+    const keyExtractor = useCallback((item: ListItem) => {
+        return item.type === "separator" ? item.key : item.data.id;
+    }, []);
+
+    // ========================================
+    // KEYBOARD ANIMATION
+    // ========================================
+    const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+
+    const messagesContainerStyle = useAnimatedStyle(() => ({
+        paddingBottom: Math.max(0, -keyboardHeight.value),
+    }));
+
+    // ========================================
+    // RENDER
+    // ========================================
+    return (
+        <>
+            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+            <SafeAreaView style={styles.container} edges={["top"]}>
+                {/* Header */}
+                <ChatHeader
+                    otherUser={otherUser}
+                    conversationId={conversationId}
+                    onBack={() => navigation.goBack()}
+                    onUserPress={() =>
+                        navigation.navigate("UserProfile", { userId: otherUser.id })
+                    }
+                    onMenuPress={() =>
+                        navigation.navigate("ConversationSettings", {
+                            otherUser,
+                            conversationId,
+                        })
+                    }
+                />
+
+                {/* Message Request Banner */}
+                {isRequest && (
+                    <View style={styles.requestBanner}>
+                        {isInitiator ? (
+                            <View style={styles.requestBannerContent}>
+                                <Ionicons name="time" size={18} color="#FFA500" />
+                                <Text style={styles.requestBannerText}>
+                                    En attente — {otherUser.displayName || otherUser.username} doit accepter votre demande.
                                 </Text>
                             </View>
-                            <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                                <Ionicons name="close-circle" size={24} color="#888" />
-                            </TouchableOpacity>
+                        ) : (
+                            <View style={styles.requestBannerContent}>
+                                <Ionicons name="mail" size={18} color="#FFA07A" />
+                                <Text style={styles.requestBannerText}>
+                                    Demande de message
+                                </Text>
+                                <View style={styles.requestButtonsRow}>
+                                    <TouchableOpacity
+                                        style={[styles.acceptButton, styles.rejectButton]}
+                                        onPress={async () => {
+                                            setIsRejecting(true);
+                                            try {
+                                                await api.delete(`/conversations/${route.params.conversationId}/request`);
+                                                setConversationStatus('REJECTED');
+                                                navigation.goBack();
+                                            } catch (e) {
+                                                console.error('Failed to reject request:', e);
+                                                Alert.alert('Erreur', 'Impossible de refuser la demande');
+                                            } finally {
+                                                setIsRejecting(false);
+                                            }
+                                        }}
+                                        disabled={isRejecting || isAccepting}
+                                    >
+                                        <Text style={styles.rejectButtonText}>
+                                            {isRejecting ? '...' : 'Refuser'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.acceptButton}
+                                        onPress={async () => {
+                                            setIsAccepting(true);
+                                            try {
+                                                await api.post(`/conversations/${route.params.conversationId}/accept`);
+                                                setConversationStatus('NORMAL');
+                                            } catch (e) {
+                                                console.error('Failed to accept request:', e);
+                                                Alert.alert('Erreur', 'Impossible d\'accepter la demande');
+                                            } finally {
+                                                setIsAccepting(false);
+                                            }
+                                        }}
+                                        disabled={isAccepting || isRejecting}
+                                    >
+                                        <Text style={styles.acceptButtonText}>
+                                            {isAccepting ? '...' : 'Accepter'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* REJECTED Banner (sender only) */}
+                {isRejected && isInitiator && (
+                    <View style={[styles.requestBanner, styles.rejectedBanner]}>
+                        <View style={styles.requestBannerContent}>
+                            <Ionicons name="close-circle" size={18} color="#FF3B30" />
+                            <Text style={[styles.requestBannerText, styles.rejectedText]}>
+                                Demande refusée — vous ne pouvez plus envoyer de messages.
+                            </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Image Preview Area */}
-                {selectedImages.length > 0 && (
-                    <View style={styles.imagePreviewContainer}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            {selectedImages.map((uri, index) => (
-                                <View key={index} style={{ marginRight: 10 }}>
-                                    <Image source={{ uri }} style={styles.previewImage} />
-                                    <TouchableOpacity
-                                        style={styles.removeImageButton}
-                                        onPress={() => removeImage(index)}
-                                    >
-                                        <Ionicons name="close" size={16} color="#fff" />
-                                    </TouchableOpacity>
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
+                {/* Messages List */}
+                <ChatMessageList
+                    listData={listData}
+                    loading={loading}
+                    fetchingMore={fetchingMore}
+                    isAtBottom={isAtBottom}
+                    newMessageCount={newMessageCount}
+                    isRecordingActive={recording.isActive}
+                    flatListRef={flatListRef}
+                    containerStyle={messagesContainerStyle}
+                    renderItem={renderItem}
+                    keyExtractor={keyExtractor}
+                    onScroll={handleScroll}
+                    onLoadMore={loadMoreMessages}
+                    onScrollToBottom={scrollToBottom}
+                />
 
-                <View style={styles.inputContainer}>
-                    {recording ? (
-                        <>
-                            <View style={styles.recordingContainer}>
-                                <View style={styles.waveformContainer}>
-                                    {isCanceling ? (
-                                        <View style={styles.cancelContainer}>
-                                            <Ionicons name="trash" size={24} color={theme.colors.error} />
-                                            <Text style={styles.cancelText}>Relâcher pour annuler</Text>
-                                        </View>
-                                    ) : (
-                                        <Waveform levels={recordingLevels} color={theme.colors.error} gap={2} barWidth={3} />
-                                    )}
-                                </View>
-                                {!isCanceling && (
-                                    <View style={styles.slideCancelHint}>
-                                        <Ionicons name="chevron-back" size={16} color={theme.colors.text.secondary} />
-                                        <Text style={styles.slideText}>Glisser pour annuler</Text>
+                {/* Input area */}
+                <KeyboardStickyView
+                    style={styles.inputAreaContainer}
+                    offset={{ closed: 0, opened: 0 }}
+                >
+                    {/* Image previews */}
+                    {selectedImages.length > 0 && (
+                        <View style={styles.previewContainer}>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                {selectedImages.map((uri, index) => (
+                                    <View key={index} style={styles.previewWrapper}>
+                                        <Image
+                                            source={{ uri }}
+                                            style={styles.previewImage}
+                                        />
+                                        <TouchableOpacity
+                                            style={styles.removePreviewButton}
+                                            onPress={() => removeImage(index)}
+                                        >
+                                            <Ionicons name="close" size={14} color="#fff" />
+                                        </TouchableOpacity>
                                     </View>
-                                )}
-                            </View>
-
-                            <View
-                                style={[styles.sendButton, { backgroundColor: isCanceling ? theme.colors.background : theme.colors.error }]}
-                                {...panResponder.panHandlers}
-                            >
-                                <Ionicons name="mic" size={20} color={isCanceling ? theme.colors.error : "#fff"} />
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            <TouchableOpacity onPress={pickImage} style={styles.iconButton}>
-                                <Ionicons name="add" size={24} color={theme.colors.primary} />
-                            </TouchableOpacity>
-
-                            <TextInput
-                                style={styles.input}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder="Votre message..."
-                                placeholderTextColor={theme.colors.text.secondary}
-                                multiline
-                                editable={!recording}
-                            />
-
-                            {inputText.trim() || selectedImages.length > 0 ? (
-                                <TouchableOpacity onPress={sendMessage} style={styles.sendButton} disabled={sending}>
-                                    {sending ? (
-                                        <ActivityIndicator color="#fff" size="small" />
-                                    ) : (
-                                        <Ionicons name="arrow-up" size={20} color="#fff" />
-                                    )}
-                                </TouchableOpacity>
-                            ) : (
-                                <View
-                                    style={styles.sendButton}
-                                    {...panResponder.panHandlers}
-                                >
-                                    <Ionicons name="mic-outline" size={20} color="#fff" />
-                                </View>
-                            )}
-                        </>
+                                ))}
+                            </ScrollView>
+                        </View>
                     )}
-                </View>
-            </KeyboardAvoidingView>
 
-            <ImageView
-                images={viewersImages}
-                imageIndex={currentImageIndex}
-                visible={isViewerVisible}
-                onRequestClose={() => setIsViewerVisible(false)}
-                FooterComponent={({ imageIndex }) => <ImageFooter imageIndex={imageIndex} />}
-            />
-        </SafeAreaView >
+                    {/* Reply banner */}
+                    {replyingTo && (
+                        <ChatReplyBanner
+                            message={replyingTo}
+                            senderName={
+                                replyingTo.senderId === user?.id
+                                    ? "Vous"
+                                    : otherUser.username
+                            }
+                            onClose={cancelReply}
+                        />
+                    )}
+
+                    {/* Editing banner */}
+                    {editingMessage && (
+                        <View style={styles.editingBanner}>
+                            <View style={styles.editingBannerContent}>
+                                <Ionicons name="pencil" size={16} color="#FFA07A" />
+                                <Text style={styles.editingBannerText}>
+                                    Modification du message
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={cancelEdit}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Ionicons name="close" size={20} color="#8E8E93" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Input bar */}
+                    <ChatInputBar
+                        value={inputText}
+                        onChangeText={setInputText}
+                        onSend={handleSendMessage}
+                        onAttach={pickImage}
+                        onStartRecording={startRecording}
+                        onStopRecording={stopRecording}
+                        onCancelRecording={cancelRecording}
+                        onLockRecording={lockRecording}
+                        sending={sending}
+                        hasContent={!!inputText.trim() || selectedImages.length > 0}
+                        inputRef={inputRef}
+                    />
+                </KeyboardStickyView>
+
+                {/* Image viewer */}
+                <ImageView
+                    images={viewerImages}
+                    imageIndex={currentImageIndex}
+                    visible={isViewerVisible}
+                    onRequestClose={() => setIsViewerVisible(false)}
+                    FooterComponent={({ imageIndex }) => (
+                        <View style={styles.viewerFooter}>
+                            <TouchableOpacity
+                                style={styles.saveImageButton}
+                                onPress={() => saveImage(viewerImages[imageIndex].uri)}
+                            >
+                                <Ionicons name="download-outline" size={22} color="#fff" />
+                                <Text style={styles.saveImageText}>Enregistrer</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                />
+
+                {/* Context menu */}
+                <ChatContextMenu
+                    visible={!!contextMenuMessage}
+                    messagePosition={contextMenuPosition}
+                    isMyMessage={contextMenuMessage?.senderId === user?.id}
+                    hasText={!!contextMenuMessage?.content}
+                    onClose={() => {
+                        setContextMenuMessage(null);
+                        setContextMenuPosition(null);
+                    }}
+                    onCopy={handleCopy}
+                    onReply={handleContextReply}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    selectedEmoji={
+                        contextMenuMessage?.reactions?.find(
+                            (r) => r.userId === user?.id
+                        )?.emoji || null
+                    }
+                    onSelectEmoji={handleSelectReaction}
+                />
+            </SafeAreaView>
+        </>
     );
 }
 
+// ========================================
+// STYLES (reduced - most moved to components)
+// ========================================
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#FFFFFF",
     },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "rgba(0,0,0,0.05)",
-        backgroundColor: '#fff',
+    inputAreaContainer: {
+        backgroundColor: "#FFFFFF",
     },
-    backButton: {
-        padding: 8,
+    previewContainer: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: "#F8F8F8",
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: "rgba(0, 0, 0, 0.1)",
     },
-    headerInfo: {
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    avatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        marginRight: 8,
-        backgroundColor: '#eee'
-    },
-    headerTitle: {
-        fontSize: 16,
-        fontWeight: "700",
-        color: theme.colors.text.primary,
-    },
-    center: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center'
-    },
-    listContent: {
-        paddingHorizontal: 16,
-        paddingVertical: 16,
-    },
-    messageContainer: {
-        maxWidth: "80%",
-        marginBottom: 12,
-    },
-    myContainer: {
-        alignSelf: "flex-end",
-        alignItems: "flex-end", // Ensures bubble wraps text tightly
-    },
-    theirContainer: {
-        alignSelf: "flex-start",
-        alignItems: "flex-start",
-    },
-    messageBubble: {
-        padding: 12,
-        borderRadius: 20,
-    },
-    myMessage: {
-        backgroundColor: theme.colors.primary,
-        borderBottomRightRadius: 4,
-    },
-    theirMessage: {
-        backgroundColor: "#F0F0F0",
-        borderBottomLeftRadius: 4,
-    },
-    messageText: {
-        fontSize: 16,
-    },
-    myMessageText: {
-        color: "#fff",
-    },
-    theirMessageText: {
-        color: theme.colors.text.primary,
-    },
-    timeText: {
-        fontSize: 10,
-        marginTop: 4,
-    },
-    myTimeText: {
-        color: theme.colors.text.secondary,
-        textAlign: 'right',
-    },
-    theirTimeText: {
-        color: theme.colors.text.secondary,
-        textAlign: 'left',
-    },
-    inputContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: "rgba(0,0,0,0.05)",
-        backgroundColor: '#fff',
-        paddingBottom: Platform.OS === 'ios' ? 34 : 12, // Handle safe area manually if needed or rely on KAV
-    },
-    input: {
-        flex: 1,
-        backgroundColor: "#F5F5F5",
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 16,
-        maxHeight: 100,
+    previewWrapper: {
         marginRight: 10,
+        position: "relative",
     },
-    sendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: theme.colors.primary,
+    previewImage: {
+        width: 70,
+        height: 70,
+        borderRadius: 12,
+    },
+    removePreviewButton: {
+        position: "absolute",
+        top: -6,
+        right: -6,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: "rgba(0, 0, 0, 0.6)",
         justifyContent: "center",
         alignItems: "center",
     },
-    iconButton: {
-        padding: 8,
-        marginRight: 4,
-    },
-    disabledSend: {
-        backgroundColor: "#ccc",
-    },
-    recordingContainer: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginRight: 10,
-    },
-    waveformContainer: {
-        flex: 1,
-        height: 50,
-        justifyContent: 'center',
-        backgroundColor: '#F5F5F5',
-        borderRadius: 25,
-        paddingHorizontal: 10,
-    },
-    cancelContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    cancelText: {
-        marginLeft: 8,
-        color: theme.colors.error,
-        fontWeight: '600',
-    },
-    slideCancelHint: {
-        position: 'absolute',
-        right: 10,
-        flexDirection: 'row',
-        alignItems: 'center',
-        opacity: 0.5,
-    },
-    slideText: {
-        fontSize: 10,
-        color: theme.colors.text.secondary,
-        marginLeft: 4,
-    },
-    imagePreviewContainer: {
-        width: '100%',
+    editingBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: "rgba(255, 160, 122, 0.1)",
+        paddingHorizontal: 16,
         paddingVertical: 10,
-        paddingHorizontal: 8,
-        backgroundColor: 'transparent', // Cleaner look
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: "rgba(255, 160, 122, 0.3)",
     },
-    previewImage: {
-        width: 100,
-        height: 100,
-        borderRadius: 12, // Slightly more rounded
-        backgroundColor: '#eee',
+    editingBannerContent: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
-    removeImageButton: {
-        position: 'absolute',
-        top: -6,
-        right: -6,
-        backgroundColor: theme.colors.error,
-        borderRadius: 12,
-        width: 24,
-        height: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#fff',
-        zIndex: 1, // Ensure clickable
+    editingBannerText: {
+        fontSize: 14,
+        color: "#FFA07A",
+        fontWeight: "500",
     },
-    // Viewer Styles
-    footerContainer: {
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 40,
+    viewerFooter: {
+        padding: 20,
+        alignItems: "center",
     },
-    downloadButton: {
-        flexDirection: 'row',
-        backgroundColor: 'rgba(0,0,0,0.6)',
+    saveImageButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(255, 255, 255, 0.2)",
         paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 30,
-        alignItems: 'center',
+        paddingVertical: 12,
+        borderRadius: 24,
     },
-    downloadText: {
-        color: '#fff',
+    saveImageText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "600",
         marginLeft: 8,
-        fontSize: 16,
-        fontWeight: '600',
     },
-    // Reply Styles
-    replyContextBubble: {
-        marginBottom: 8,
-        borderRadius: 8,
-        padding: 6,
-        flexDirection: 'row',
-        overflow: 'hidden',
-        minWidth: 120, // Min width to look good
+    // Message Request Banner
+    requestBanner: {
+        backgroundColor: "rgba(255, 160, 122, 0.1)",
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: "rgba(255, 160, 122, 0.3)",
     },
-    replyBar: {
-        width: 4,
-        borderRadius: 2,
+    requestBannerContent: {
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 10,
     },
-    replySender: {
-        fontWeight: '700',
-        fontSize: 12,
-        marginBottom: 2,
-        marginLeft: 6,
-        color: '#555',
+    requestBannerText: {
+        flex: 1,
+        fontSize: 13,
+        color: "#636366",
+        lineHeight: 18,
     },
-    replyTextPreview: {
-        fontSize: 12,
-        marginLeft: 6,
-        color: '#666',
-    },
-    replyBarContainer: {
+    acceptButton: {
+        backgroundColor: "#FFA07A",
         paddingHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
+        borderRadius: 16,
     },
-    replyBarContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f9f9f9',
-        borderRadius: 12,
-        padding: 8,
+    acceptButtonText: {
+        color: "#FFFFFF",
+        fontSize: 14,
+        fontWeight: "600",
     },
-    replyBarLine: {
-        width: 4,
-        height: '100%',
-        borderRadius: 2,
+    // Reject Button & Row
+    requestButtonsRow: {
+        flexDirection: "row",
+        gap: 8,
     },
-    replyBarSender: {
-        fontWeight: '700',
-        color: theme.colors.primary,
-        fontSize: 12,
-        marginBottom: 2,
+    rejectButton: {
+        backgroundColor: "transparent",
+        borderWidth: 1,
+        borderColor: "#8E8E93",
     },
-    replyBarText: {
-        color: '#666',
-        fontSize: 12,
-    }
+    rejectButtonText: {
+        color: "#8E8E93",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    // REJECTED Banner
+    rejectedBanner: {
+        backgroundColor: "rgba(255, 59, 48, 0.1)",
+        borderBottomColor: "rgba(255, 59, 48, 0.3)",
+    },
+    rejectedText: {
+        color: "#FF3B30",
+    },
 });

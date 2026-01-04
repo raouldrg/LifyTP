@@ -4,197 +4,242 @@ import {
     Text,
     TouchableOpacity,
     StyleSheet,
-    SafeAreaView,
-    Image,
     ActivityIndicator,
-    Alert
+    Alert,
+    Platform,
+    ActionSheetIOS
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { updateProfile, uploadAvatar } from "../lib/api";
-import { theme } from "../theme";
-import { useAuth } from "../lib/AuthContext";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from 'expo-image-picker';
+import { api, uploadFile } from "../services/api";
+import { theme } from "../theme";
+import { useAuth } from "../context/AuthContext";
+import Avatar from "../components/Avatar";
+import DefaultAvatarPicker from "../components/DefaultAvatarPicker";
 
-export default function AvatarScreen({ navigation, route }: any) {
-    const { user, updateUser, token, signIn } = useAuth();
-    const mode = route.params?.mode || 'onboard';
-
-    // State
-    const [seed, setSeed] = useState(Date.now().toString());
+export default function AvatarScreen({ navigation }: any) {
+    const { user, refreshUser } = useAuth();
+    const [imageUri, setImageUri] = useState<string | null>(user?.avatarUrl || null);
+    const [avatarColor, setAvatarColor] = useState<string | null>(user?.avatarColor || null);
     const [loading, setLoading] = useState(false);
-    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [showColorPicker, setShowColorPicker] = useState(false);
 
-    // Derived
-    const randomAvatarUrl = `https://ui-avatars.com/api/?name=${user?.username || "User"}&background=random&size=200&length=1&bold=true&seed=${seed}`;
-    // If editing and no selection made, show current avatar. If onboarding, show random.
-    const initialImage = mode === 'edit' ? (user?.avatarUrl || randomAvatarUrl) : randomAvatarUrl;
-    const displayImage = selectedImage || initialImage;
+    // Initial check: if user has avatar, set it
+    // But we are in onboarding, usually empty.
 
-    function handleRegenerate() {
-        setSeed(Math.random().toString());
-        setSelectedImage(null); // Reset manual selection if regenerating
-    }
+    // Derived display props
+    // If imageUri is set (local or remote), use it.
+    // If not, use avatarColor.
 
-    async function handleChoosePhoto() {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-        });
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.8,
+            });
 
-        if (!result.canceled) {
-            setSelectedImage(result.assets[0].uri);
+            if (!result.canceled) {
+                setImageUri(result.assets[0].uri);
+                setAvatarColor(null); // Clear color if image picked
+            }
+        } catch (error) {
+            Alert.alert('Erreur', 'Impossible d\'ouvrir la galerie');
         }
-    }
+    };
 
-    async function handleFinish() {
+    const handleOptions = () => {
+        const options = ['Choisir une photo', 'Avatar Lify (Couleur)', 'Annuler'];
+        const cancelButtonIndex = 2;
+
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options,
+                    cancelButtonIndex,
+                    title: 'Modifier l\'avatar'
+                },
+                buttonIndex => {
+                    if (buttonIndex === 0) pickImage();
+                    else if (buttonIndex === 1) setShowColorPicker(true);
+                }
+            );
+        } else {
+            Alert.alert('Modifier l\'avatar', undefined, [
+                { text: 'Choisir une photo', onPress: pickImage },
+                { text: 'Avatar Lify (Couleur)', onPress: () => setShowColorPicker(true) },
+                { text: 'Annuler', style: 'cancel' }
+            ]);
+        }
+    };
+
+    const handleNext = async () => {
         setLoading(true);
         try {
-            let finalAvatarUrl = displayImage;
-
-            // If user selected an image, upload it first
-            if (selectedImage) {
-                const uploadRes = await uploadAvatar(selectedImage);
-                if (uploadRes.url) {
-                    finalAvatarUrl = uploadRes.url;
-                }
-            } else {
-                if (mode === 'edit' && !selectedImage) {
-                    // Keeping existing or just modifying random seed
-                    // If displayImage is a random URL we generated
-                    finalAvatarUrl = displayImage;
-                }
+            // If local image URI (not http), upload it
+            let finalUrl = imageUri;
+            if (imageUri && !imageUri.startsWith('http')) {
+                const res = await uploadFile(imageUri, 'image');
+                finalUrl = res.url;
+            } else if (!imageUri) {
+                finalUrl = null;
             }
 
-            // Update Backend
-            // If we uploaded, finalAvatarUrl is the remote URL
-            // If we didn't, it's the randomAvatarUrl
-            const data = await updateProfile(undefined, finalAvatarUrl);
+            // Update user
+            const updatePayload: any = {
+                avatarUrl: finalUrl,
+                avatarColor: avatarColor
+            };
 
-            // Immediate Context Update
-            if (data.user) {
-                updateUser({ avatarUrl: data.user.avatarUrl });
-            } else {
-                // Fallback if backend doesn't return user for some reason (rare)
-                updateUser({ avatarUrl: finalAvatarUrl });
-            }
+            // Use PATCH /users/me as it handles both
+            await api.patch('/users/me', updatePayload);
 
-            if (mode === 'edit') {
-                navigation.goBack();
-            } else {
-                navigation.replace("Main");
-            }
-        } catch (err) {
-            console.error(err);
-            Alert.alert("Erreur", "Impossible de mettre à jour l'avatar.");
+            await refreshUser();
+            navigation.navigate("Bio");
+        } catch (e: any) {
+            console.error(e);
+            Alert.alert("Erreur", "Impossible de sauvegarder l'avatar.");
         } finally {
             setLoading(false);
         }
-    }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
-            {mode === 'edit' && (
-                <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 16 }}>
-                    <Text style={{ fontSize: 16, color: theme.colors.primary }}>Annuler</Text>
-                </TouchableOpacity>
-            )}
             <View style={styles.content}>
-                <Text style={styles.logo}>{mode === 'edit' ? "Changer de photo" : "Votre look 😎"}</Text>
-                <Text style={styles.intro}>{mode === 'edit' ? "Mettez à jour votre photo de profil." : "Choisissez une photo de profil."}</Text>
+                <View style={styles.header}>
+                    <Text style={styles.stepIndicator}>Étape 3 sur 4</Text>
+                    <Text style={styles.title}>Une photo ?</Text>
+                    <Text style={styles.subtitle}>Montre ton plus beau sourire aux autres membres.</Text>
+                </View>
 
-                <View style={styles.avatarContainer}>
-                    <Image source={{ uri: displayImage }} style={styles.avatar} />
-                    <TouchableOpacity onPress={handleRegenerate} style={styles.refreshButton}>
-                        <Ionicons name="dice-outline" size={24} color="white" />
+                <View style={styles.centerContainer}>
+                    <TouchableOpacity onPress={handleOptions} activeOpacity={0.8}>
+                        <Avatar
+                            avatarUrl={imageUri}
+                            avatarColor={avatarColor}
+                            username={user?.username}
+                            displayName={user?.displayName}
+                            size={160}
+                            style={styles.avatar}
+                        />
+                        <View style={styles.editBadge}>
+                            <Ionicons name="pencil" size={20} color="white" />
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={handleOptions} style={styles.changeButton}>
+                        <Text style={styles.changeText}>Modifier</Text>
                     </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity onPress={handleChoosePhoto} style={styles.secondaryButton}>
-                    <Ionicons name="image-outline" size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.secondaryButtonText}>Importer une photo</Text>
-                </TouchableOpacity>
+                <View style={{ flex: 1 }} />
 
                 <TouchableOpacity
                     style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleFinish}
+                    onPress={handleNext}
                     disabled={loading}
                 >
                     {loading ? (
                         <ActivityIndicator color="white" />
                     ) : (
-                        <Text style={styles.buttonText}>{mode === 'edit' ? "Enregistrer" : "C'est parti !"}</Text>
+                        <Text style={styles.buttonText}>Continuer</Text>
                     )}
                 </TouchableOpacity>
             </View>
+
+            <DefaultAvatarPicker
+                visible={showColorPicker}
+                onClose={() => setShowColorPicker(false)}
+                onSelectColor={(color) => {
+                    setAvatarColor(color);
+                    setImageUri(null); // Clear image if color picked
+                    setShowColorPicker(false);
+                }}
+                username={user?.username}
+            />
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.colors.background },
-    content: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-    logo: {
-        fontSize: 28,
-        fontWeight: "800",
-        color: theme.colors.primary,
-        textAlign: "center",
-        marginBottom: 8
+    container: {
+        flex: 1,
+        backgroundColor: theme.colors.background,
     },
-    intro: {
-        fontSize: 16,
+    content: {
+        flex: 1,
+        padding: 24,
+    },
+    header: {
+        marginTop: 40,
+        marginBottom: 40,
+    },
+    stepIndicator: {
+        color: theme.colors.accent,
+        fontWeight: "600",
+        marginBottom: 8,
+    },
+    title: {
+        ...theme.typography.h1,
+        marginBottom: 8,
+    },
+    subtitle: {
+        ...theme.typography.body,
         color: theme.colors.text.secondary,
-        textAlign: "center",
-        marginBottom: 48
     },
-    avatarContainer: {
-        position: 'relative',
-        marginBottom: 48,
+    centerContainer: {
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 20,
     },
     avatar: {
-        width: 150,
-        height: 150,
-        borderRadius: 75,
-        backgroundColor: '#eee'
+        // Avatar component has its own styles, but we can override if needed
     },
-    refreshButton: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: theme.colors.accent,
-        padding: 10,
-        borderRadius: 25,
+    editBadge: {
+        position: "absolute",
+        bottom: 5,
+        right: 5,
+        backgroundColor: theme.colors.primary,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: "center",
+        alignItems: "center",
         borderWidth: 3,
-        borderColor: theme.colors.background
+        borderColor: theme.colors.background,
     },
-    secondaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        borderRadius: theme.borderRadius.l,
-        borderWidth: 1,
-        borderColor: theme.colors.primary,
-        marginBottom: 24
+    changeButton: {
+        marginTop: 16,
+        padding: 8,
     },
-    secondaryButtonText: {
+    changeText: {
         color: theme.colors.primary,
         fontWeight: "600",
-        fontSize: 16
+        fontSize: 16,
     },
     button: {
         backgroundColor: theme.colors.primary,
-        paddingHorizontal: 48,
-        paddingVertical: 16,
-        borderRadius: theme.borderRadius.l,
-        width: '100%',
+        height: 56,
+        borderRadius: 28,
+        justifyContent: "center",
         alignItems: "center",
-        marginTop: 16,
+        marginBottom: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 5,
     },
-    buttonDisabled: { opacity: 0.7 },
+    buttonDisabled: {
+        backgroundColor: "#ccc",
+        shadowOpacity: 0,
+    },
     buttonText: {
         color: "white",
-        fontWeight: "700",
-        fontSize: 18
+        fontSize: 18,
+        fontWeight: "600",
     }
 });

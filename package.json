@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "prepare": "husky install",
-    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --max-warnings=0",
+    "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "typecheck": "tsc -b",
     "docker:up": "docker compose up -d",
@@ -19,12 +19,17 @@
     "dev:mobile": "npm start -w @lify/mobile"
   },
   "devDependencies": {
+    "@eslint/js": "^9.12.0",
     "concurrently": "^9.0.0",
     "eslint": "^9.12.0",
-    "@eslint/js": "^9.12.0",
-    "typescript": "^5.6.3",
-    "prettier": "^3.3.3",
     "eslint-config-prettier": "^9.1.0",
-    "husky": "^9.1.6"
+    "husky": "^9.1.6",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.50.1"
+  },
+  "overrides": {
+    "react-native-worklets": "0.5.1",
+    "react-native-reanimated": "4.1.1"
   }
 }

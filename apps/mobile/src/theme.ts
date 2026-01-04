@@ -34,11 +34,20 @@ export const theme = {
         round: 9999,
     },
     typography: {
-        h1: { fontSize: 32, fontWeight: "700" as "700" },
-        h2: { fontSize: 24, fontWeight: "600" as "600" },
-        h3: { fontSize: 20, fontWeight: "600" as "600" },
-        body: { fontSize: 16, fontWeight: "400" as "400" },
-        caption: { fontSize: 14, fontWeight: "400" as "400" },
-        button: { fontSize: 16, fontWeight: "600" as "600" },
+        h1: { fontSize: 32, fontWeight: "700" as const },
+        h2: { fontSize: 24, fontWeight: "600" as const },
+        h3: { fontSize: 20, fontWeight: "600" as const },
+        body: { fontSize: 16, fontWeight: "400" as const },
+        caption: { fontSize: 14, fontWeight: "400" as const },
+        button: { fontSize: 16, fontWeight: "600" as const },
+        // Unified page title style (Messages, Recherche, etc.)
+        pageTitle: { fontSize: 28, fontWeight: "700" as const, letterSpacing: -0.5 },
+    },
+    // Header layout constants for pixel-perfect consistency
+    header: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        searchBarMarginBottom: 12,
+        actionButtonSize: 40,
     },
 };

@@ -13,7 +13,9 @@ This project is a Monorepo containing the Backend (API) and Frontend (Mobile App
 - **`apps/mobile`**: React Native App using **Expo**.
   - `src/navigation/`: App Navigation (Routes, Stacks).
   - `src/screens/`: UI Screens (Login, Home).
-  - `src/lib/`: API clients and helpers.
+  - `src/services/`: API clients (Axios) and Socket.io.
+  - `src/context/`: Global State (Auth).
+  - `src/components/`: Shared UI components.
   - `App.tsx`: Main entry component.
 
 ## 🚀 Getting Started

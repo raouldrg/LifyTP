@@ -1,0 +1,157 @@
+
+> @lify/api@0.1.0 dev
+> tsx watch src/index.ts
+
+[minio] endpoint=localhost port=9000 ssl=false bucket=media
+{"level":30,"time":1767551101618,"pid":1740,"hostname":"Mac.lan","msg":"✅ Redis Adapter connected"}
+{"level":30,"time":1767551101618,"pid":1740,"hostname":"Mac.lan","msg":"✅ Socket.io initialized"}
+
+/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:371
+            throw new FST_ERR_DUPLICATED_ROUTE(opts.method, opts.url)
+                  ^
+FastifyError [Error]: Method 'PATCH' already declared for route '/users/me'
+    at Object.addNewRoute (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:371:19)
+    at Object.route (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:265:19)
+    at Object.prepareRoute (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:167:18)
+    at Object._patch [as patch] (/Users/raouldrg/Desktop/Lify/node_modules/fastify/fastify.js:268:34)
+    at usersRoutes (/Users/raouldrg/Desktop/Lify/apps/api/src/routes/users.ts:83:9)
+    at Plugin.exec (/Users/raouldrg/Desktop/Lify/node_modules/avvio/lib/plugin.js:125:28)
+    at Boot._loadPlugin (/Users/raouldrg/Desktop/Lify/node_modules/avvio/boot.js:432:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'FST_ERR_DUPLICATED_ROUTE',
+  statusCode: 500
+}
+
+Node.js v22.14.0
+7:25:57 PM [tsx] change in ./src/routes/auth.ts Rerunning...
+c[minio] endpoint=localhost port=9000 ssl=false bucket=media
+{"level":30,"time":1767551158881,"pid":1767,"hostname":"Mac.lan","msg":"✅ Redis Adapter connected"}
+{"level":30,"time":1767551158881,"pid":1767,"hostname":"Mac.lan","msg":"✅ Socket.io initialized"}
+
+/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:371
+            throw new FST_ERR_DUPLICATED_ROUTE(opts.method, opts.url)
+                  ^
+FastifyError [Error]: Method 'PATCH' already declared for route '/users/me'
+    at Object.addNewRoute (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:371:19)
+    at Object.route (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:265:19)
+    at Object.prepareRoute (/Users/raouldrg/Desktop/Lify/node_modules/fastify/lib/route.js:167:18)
+    at Object._patch [as patch] (/Users/raouldrg/Desktop/Lify/node_modules/fastify/fastify.js:268:34)
+    at usersRoutes (/Users/raouldrg/Desktop/Lify/apps/api/src/routes/users.ts:83:9)
+    at Plugin.exec (/Users/raouldrg/Desktop/Lify/node_modules/avvio/lib/plugin.js:125:28)
+    at Boot._loadPlugin (/Users/raouldrg/Desktop/Lify/node_modules/avvio/boot.js:432:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'FST_ERR_DUPLICATED_ROUTE',
+  statusCode: 500
+}
+
+Node.js v22.14.0
+7:25:59 PM [tsx] change in ./src/routes/users.ts Rerunning...
+c[minio] endpoint=localhost port=9000 ssl=false bucket=media
+{"level":30,"time":1767551160815,"pid":1779,"hostname":"Mac.lan","msg":"✅ Redis Adapter connected"}
+{"level":30,"time":1767551160815,"pid":1779,"hostname":"Mac.lan","msg":"✅ Socket.io initialized"}
+└── (empty root node)
+    ├── /
+    │   ├── u
+    │   │   ├── pload (POST)
+    │   │   │   └── s/
+    │   │   │       └── * (HEAD, GET)
+    │   │   └── sers/
+    │   │       ├── me (PATCH)
+    │   │       │   └── /password (PATCH)
+    │   │       ├── search (GET, HEAD)
+    │   │       └── :id (GET, HEAD)
+    │   │           └── /
+    │   │               ├── follow (POST, DELETE)
+    │   │               │   ├── ers (GET, HEAD)
+    │   │               │   └── ing (GET, HEAD)
+    │   │               └── events (GET, HEAD)
+    │   ├── f
+    │   │   ├── riends (GET, HEAD)
+    │   │   │   └── /requests (POST, GET, HEAD)
+    │   │   │       └── /
+    │   │   │           └── :id
+    │   │   │               └── /accept (POST)
+    │   │   ├── eed (GET, HEAD)
+    │   │   │   └── /events (GET, HEAD)
+    │   │   └── ollow/requests (GET, HEAD)
+    │   │       └── /
+    │   │           ├── count (GET, HEAD)
+    │   │           └── :requestId
+    │   │               └── /
+    │   │                   ├── accept (POST)
+    │   │                   └── reject (POST)
+    │   ├── posts (POST)
+    │   │   └── /
+    │   │       └── :id (GET, HEAD)
+    │   │           └── /
+    │   │               ├── like (POST)
+    │   │               └── comments (POST, GET, HEAD)
+    │   ├── me (GET, HEAD)
+    │   │   ├── /
+    │   │   │   ├── p
+    │   │   │   │   ├── osts (GET, HEAD)
+    │   │   │   │   └── references (GET, HEAD, PATCH)
+    │   │   │   └── gamification (GET, HEAD)
+    │   │   └── ssages/
+    │   │       ├── to/
+    │   │       │   └── :otherUserId (POST)
+    │   │       ├── with/
+    │   │       │   └── :otherUserId (GET, HEAD)
+    │   │       ├── unread (GET, HEAD)
+    │   │       ├── read/
+    │   │       │   └── :conversationId (POST)
+    │   │       └── :id|:messageId (PATCH, DELETE)
+    │   │           └── /
+    │   │               ├── duration (PATCH)
+    │   │               └── reactions (POST, DELETE)
+    │   ├── conversations (GET, HEAD)
+    │   │   └── /
+    │   │       └── :conversationId (DELETE)
+    │   ├── notifications (GET, HEAD)
+    │   │   └── /
+    │   │       └── :id
+    │   │           └── /read (PATCH)
+    │   ├── gamification/
+    │   │   ├── unlock (POST)
+    │   │   └── activity (POST)
+    │   ├── onboarding/complete (POST)
+    │   ├── health (GET, HEAD)
+    │   ├── auth/
+    │   │   ├── re
+    │   │   │   ├── gister (POST)
+    │   │   │   └── fresh (POST)
+    │   │   ├── log
+    │   │   │   ├── in (POST)
+    │   │   │   └── out (POST)
+    │   │   ├── check-username (GET, HEAD)
+    │   │   ├── onboarding/
+    │   │   │   ├── pseudo (POST)
+    │   │   │   └── update (POST)
+    │   │   └── google (POST)
+    │   ├── dev/mock-login (POST)
+    │   ├── linked-
+    │   │   ├── calendars (GET, HEAD)
+    │   │   │   └── /
+    │   │   │       ├── google/connect (POST)
+    │   │   │       ├── ics (POST)
+    │   │   │       └── :id
+    │   │   │           └── /sync (POST)
+    │   │   └── events (GET, HEAD)
+    │   │       └── /deduplicate/
+    │   │           ├── preview (POST)
+    │   │           └── apply (POST)
+    │   └── events (POST, GET, HEAD)
+    │       └── /
+    │           ├── timeline (GET, HEAD)
+    │           └── :id (DELETE, PUT, GET, HEAD)
+    │               └── /
+    │                   ├── participants (GET, HEAD, POST)
+    │                   │   └── /
+    │                   │       └── :participantId (PATCH)
+    │                   ├── visibility (PATCH)
+    │                   ├── share (POST)
+    │                   ├── invite (POST)
+    │                   └── rsvp (PATCH)
+    └── * (OPTIONS)
+
+{"level":50,"time":1767551160850,"pid":1779,"hostname":"Mac.lan","err":{"type":"Error","message":"listen EADDRINUSE: address already in use 0.0.0.0:3000","stack":"Error: listen EADDRINUSE: address already in use 0.0.0.0:3000\n    at Server.setupListenHandle [as _listen2] (node:net:1937:16)\n    at listenInCluster (node:net:1994:12)\n    at node:net:2203:7\n    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)","code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"0.0.0.0","port":3000},"msg":"listen EADDRINUSE: address already in use 0.0.0.0:3000"}

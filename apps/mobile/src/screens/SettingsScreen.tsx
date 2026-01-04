@@ -1,11 +1,41 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert, SafeAreaView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Switch, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../theme";
-import { useAuth } from "../lib/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { api } from "../services/api";
 
 export default function SettingsScreen({ navigation }: any) {
-    const { signOut } = useAuth();
+    const { signOut, user } = useAuth();
+    const [isPrivate, setIsPrivate] = useState(false);
+    const [loadingPrivate, setLoadingPrivate] = useState(true);
+
+    useEffect(() => {
+        fetchPrivacySetting();
+    }, []);
+
+    const fetchPrivacySetting = async () => {
+        try {
+            const res = await api.get(`/users/${user?.id}`);
+            setIsPrivate(res.data.isPrivate ?? false);
+        } catch (e) {
+            console.error("Failed to fetch privacy setting", e);
+        } finally {
+            setLoadingPrivate(false);
+        }
+    };
+
+    const handlePrivateToggle = async (value: boolean) => {
+        setIsPrivate(value);
+        try {
+            await api.patch("/users/me", { isPrivate: value });
+        } catch (e) {
+            console.error("Failed to update privacy setting", e);
+            setIsPrivate(!value); // Revert on error
+            Alert.alert("Erreur", "Impossible de modifier le paramètre de confidentialité");
+        }
+    };
 
     async function handleLogout() {
         Alert.alert(
@@ -67,6 +97,32 @@ export default function SettingsScreen({ navigation }: any) {
 
                 <View style={styles.separator} />
 
+                <Text style={styles.sectionTitle}>Confidentialité</Text>
+
+                <View style={styles.itemSwitch}>
+                    <View style={styles.itemLeft}>
+                        <Ionicons name="lock-closed-outline" size={20} color={theme.colors.text.primary} />
+                        <View style={styles.itemTextContainer}>
+                            <Text style={styles.itemText}>Compte privé</Text>
+                            <Text style={styles.itemDescription}>
+                                Seuls vos abonnés approuvés peuvent voir vos événements
+                            </Text>
+                        </View>
+                    </View>
+                    {loadingPrivate ? (
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                        <Switch
+                            value={isPrivate}
+                            onValueChange={handlePrivateToggle}
+                            trackColor={{ false: "#D1D1D6", true: theme.colors.primary }}
+                            thumbColor="#FFFFFF"
+                        />
+                    )}
+                </View>
+
+                <View style={styles.separator} />
+
                 <TouchableOpacity style={styles.itemLogout} onPress={handleLogout}>
                     <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
                     <Text style={styles.itemTextLogout}>Se déconnecter</Text>
@@ -107,6 +163,23 @@ const styles = StyleSheet.create({
     itemLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
     itemText: { fontSize: 16, color: theme.colors.text.primary },
     separator: { height: 32 },
+    itemSwitch: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#f0f0f0"
+    },
+    itemTextContainer: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    itemDescription: {
+        fontSize: 12,
+        color: theme.colors.text.secondary,
+        marginTop: 2,
+    },
     itemLogout: {
         flexDirection: "row",
         alignItems: "center",
