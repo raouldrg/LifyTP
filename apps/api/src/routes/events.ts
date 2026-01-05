@@ -7,14 +7,17 @@ const VISIBILITIES = ["PRIVATE", "FRIENDS", "LINK", "PUBLIC"] as const;
 type Visibility = typeof VISIBILITIES[number];
 
 export default async function eventRoutes(app: FastifyInstance) {
-  // 🟢 Créer un événement (+ host auto)
+  // 🟢 Créer un événement (+ host auto) - supports recurrence
   app.post("/events", async (req, reply) => {
     await requireAuth(req, reply);
     if ((reply as any).sent) return;
     const { userId } = req as any;
 
     try {
-      const { title, description, startAt, endAt, isPrivate, themeId, colorHex } = req.body as {
+      const {
+        title, description, startAt, endAt, isPrivate, themeId, colorHex,
+        recurrenceType, recurrenceEndAt
+      } = req.body as {
         title: string;
         description?: string;
         startAt: string;
@@ -22,27 +25,84 @@ export default async function eventRoutes(app: FastifyInstance) {
         isPrivate?: boolean;
         themeId?: string;
         colorHex?: string;
+        recurrenceType?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+        recurrenceEndAt?: string;
       };
 
-      const event = await prisma.event.create({
-        data: {
-          title,
-          description,
-          startAt: new Date(startAt),
-          endAt: endAt ? new Date(endAt) : null,
-          isPrivate: isPrivate ?? true,
-          ownerId: userId,
-          themeId: themeId || null,
-          colorHex: colorHex || null,
-        },
-      });
+      const startDate = new Date(startAt);
+      const endDate = endAt ? new Date(endAt) : null;
+      const duration = endDate ? endDate.getTime() - startDate.getTime() : 0;
 
-      // Host auto
-      await prisma.participant.create({
-        data: { eventId: event.id, userId, role: "HOST", status: "GOING" },
-      });
+      // Generate recurring instances if recurrence is enabled
+      const isRecurring = recurrenceType && recurrenceType !== "NONE" && recurrenceEndAt;
+      const recurrenceGroupId = isRecurring ? randomUUID() : null;
+      const recurrenceEnd = recurrenceEndAt ? new Date(recurrenceEndAt) : null;
 
-      return reply.send(event);
+      const eventsToCreate: Array<{
+        startAt: Date;
+        endAt: Date | null;
+      }> = [];
+
+      if (isRecurring && recurrenceEnd) {
+        let currentStart = new Date(startDate);
+        const maxInstances = 52; // Safety limit: 1 year of weekly events
+
+        while (currentStart <= recurrenceEnd && eventsToCreate.length < maxInstances) {
+          eventsToCreate.push({
+            startAt: new Date(currentStart),
+            endAt: duration ? new Date(currentStart.getTime() + duration) : null,
+          });
+
+          // Advance to next occurrence
+          switch (recurrenceType) {
+            case "DAILY":
+              currentStart.setDate(currentStart.getDate() + 1);
+              break;
+            case "WEEKLY":
+              currentStart.setDate(currentStart.getDate() + 7);
+              break;
+            case "MONTHLY":
+              currentStart.setMonth(currentStart.getMonth() + 1);
+              break;
+            case "YEARLY":
+              currentStart.setFullYear(currentStart.getFullYear() + 1);
+              break;
+          }
+        }
+      } else {
+        // Single event
+        eventsToCreate.push({ startAt: startDate, endAt: endDate });
+      }
+
+      // Create all events
+      const createdEvents = [];
+      for (const eventData of eventsToCreate) {
+        const event = await prisma.event.create({
+          data: {
+            title,
+            description,
+            startAt: eventData.startAt,
+            endAt: eventData.endAt,
+            isPrivate: isPrivate ?? true,
+            ownerId: userId,
+            themeId: themeId || null,
+            colorHex: colorHex || null,
+            recurrenceType: recurrenceType || "NONE",
+            recurrenceEndAt: recurrenceEnd,
+            recurrenceGroupId,
+          },
+        });
+
+        // Host auto for each instance
+        await prisma.participant.create({
+          data: { eventId: event.id, userId, role: "HOST", status: "GOING" },
+        });
+
+        createdEvents.push(event);
+      }
+
+      // Return first event (or all if recurring)
+      return reply.send(isRecurring ? createdEvents : createdEvents[0]);
     } catch (err) {
       req.log.error(err);
       return reply.status(500).send({ error: "Erreur lors de la création" });
@@ -62,13 +122,31 @@ export default async function eventRoutes(app: FastifyInstance) {
     return reply.send(events);
   });
 
-  // 🟠 Supprimer un événement
+  // 🟠 Supprimer un événement (supports ?deleteAll=true for recurring series)
   app.delete("/events/:id", async (req, reply) => {
     await requireAuth(req, reply);
     if ((reply as any).sent) return;
 
     const { id } = req.params as { id: string };
+    const { deleteAll } = req.query as { deleteAll?: string };
+
     try {
+      // Check if we need to delete all recurring instances
+      if (deleteAll === "true") {
+        const event = await prisma.event.findUnique({
+          where: { id },
+          select: { recurrenceGroupId: true }
+        });
+
+        if (event?.recurrenceGroupId) {
+          await prisma.event.deleteMany({
+            where: { recurrenceGroupId: event.recurrenceGroupId }
+          });
+          return reply.send({ success: true, deletedAll: true });
+        }
+      }
+
+      // Delete single event
       await prisma.event.delete({ where: { id } });
       return reply.send({ success: true });
     } catch {

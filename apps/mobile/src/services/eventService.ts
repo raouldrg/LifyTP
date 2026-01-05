@@ -23,6 +23,8 @@ export interface CreateEventData {
     endAt: string;
     themeId?: string;
     colorHex?: string;
+    recurrenceType?: 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+    recurrenceEndAt?: string;
 }
 
 export interface UpdateEventData extends Partial<CreateEventData> {
@@ -120,11 +122,11 @@ export async function updateEvent(id: string, eventData: Partial<CreateEventData
 }
 
 /**
- * Delete an event
+ * Delete an event (use deleteAll=true to delete all recurring instances)
  */
-export async function deleteEvent(id: string): Promise<void> {
+export async function deleteEvent(id: string, deleteAll = false): Promise<void> {
     try {
-        await api.delete(`/events/${id}`);
+        await api.delete(`/events/${id}`, { params: deleteAll ? { deleteAll: 'true' } : {} });
     } catch (error) {
         console.error('[EventService] Error deleting event:', error);
         throw error;

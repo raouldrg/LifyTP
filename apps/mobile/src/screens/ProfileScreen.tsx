@@ -478,6 +478,8 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
                     endAt: e.endAt,
                     themeId: e.themeId,
                     colorHex: e.colorHex,
+                    recurrenceType: e.recurrenceType,
+                    recurrenceEndAt: e.recurrenceEndAt,
                 });
             }
             loadEvents(currentStartOfWeek);

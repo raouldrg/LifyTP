@@ -262,6 +262,14 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
 
         const selectedTheme = availableThemes.find(t => t.id === selectedThemeId);
 
+        // Calculate recurrence end date (3 months from start by default)
+        let recurrenceEnd: string | undefined;
+        if (recurrenceEnabled) {
+            const defaultEnd = new Date(startDateTime);
+            defaultEnd.setMonth(defaultEnd.getMonth() + 3);
+            recurrenceEnd = defaultEnd.toISOString();
+        }
+
         const newEvent: CalendarEvent = {
             userId: 'current',
             title: title.trim(),
@@ -273,11 +281,14 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
             startAt: startDateTime.toISOString(),
             endAt: endDateTime.toISOString(),
             dayIndex: (startDateTime.getDay() + 6) % 7,
+            // Recurrence
+            recurrenceType: recurrenceEnabled ? recurrenceType.toUpperCase() as any : 'NONE',
+            recurrenceEndAt: recurrenceEnd,
         };
 
         onSave(newEvent);
         handleClose();
-    }, [canSave, title, description, selectedThemeId, availableThemes, startDateTime, endDateTime, onSave, handleClose]);
+    }, [canSave, title, description, selectedThemeId, availableThemes, startDateTime, endDateTime, recurrenceEnabled, recurrenceType, onSave, handleClose]);
 
     // Render date item for FlatList
     const renderDateItem = useCallback(({ item }: { item: { date: Date; key: string } }) => {

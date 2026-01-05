@@ -113,6 +113,14 @@ enum ParticipantStatus {
   DECLINED
 }
 
+enum RecurrenceType {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
 // --- Modèle Event ---
 model Event {
   id           String    @id @default(cuid())
@@ -128,6 +136,11 @@ model Event {
   // Theme support
   themeId      String?
   colorHex     String?
+
+  // Recurrence support
+  recurrenceType    RecurrenceType  @default(NONE)
+  recurrenceEndAt   DateTime?       // When recurrence stops generating
+  recurrenceGroupId String?         // Links recurring instances together
 
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -148,6 +161,7 @@ model Event {
 
   @@index([ownerId])
   @@index([startAt])
+  @@index([recurrenceGroupId])
 }
 
 // ==============================

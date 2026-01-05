@@ -1,4 +1,5 @@
 export type EventTheme = "Travail" | "Sport" | "Social" | "Famille" | "Santé" | "Autre" | string;
+export type RecurrenceType = 'NONE' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
 
 export interface CalendarEvent {
     id?: string; // Optional for draft (unsaved) events
@@ -13,4 +14,7 @@ export interface CalendarEvent {
     // New theme system
     themeId?: string;   // Reference to UserTheme
     colorHex?: string;  // Direct color fallback
+    // Recurrence
+    recurrenceType?: RecurrenceType;
+    recurrenceEndAt?: string;
 }
