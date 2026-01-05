@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet,
-    TextInput, TouchableOpacity,
+    TextInput, TouchableOpacity, Pressable,
     KeyboardAvoidingView, Platform, ScrollView,
     Keyboard, Modal, Dimensions, Switch
 } from 'react-native';
@@ -56,6 +56,7 @@ const FOOTER_HEIGHT = 90;
 export function CreateEventSheet({ visible, initialDate, initialTime, onClose, onSave }: CreateEventSheetProps) {
     const insets = useSafeAreaInsets();
     const dateScrollRef = useRef<ScrollView>(null);
+    const titleInputRef = useRef<TextInput>(null);
 
     // ============================================================
     // FORM STATE
@@ -158,7 +159,9 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
             // Scroll to selected date (index 7 = center of -7 to +14)
             setTimeout(() => {
                 dateScrollRef.current?.scrollTo({ x: 0, animated: false });
-            }, 100);
+                // Autofocus title input
+                titleInputRef.current?.focus();
+            }, 150);
         }
     }, [visible, initialDate, initialTime]);
 
@@ -167,8 +170,14 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     // ============================================================
     const handleClose = useCallback(() => {
         Keyboard.dismiss();
+        setShowTimePicker(false);
         onClose();
     }, [onClose]);
+
+    const dismissKeyboardAndPicker = useCallback(() => {
+        Keyboard.dismiss();
+        setShowTimePicker(false);
+    }, []);
 
     const handleTimeChange = useCallback((_: any, date?: Date) => {
         if (Platform.OS === 'android') setShowTimePicker(false);
@@ -224,225 +233,230 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                 style={styles.flex1}
                 keyboardVerticalOffset={0}
             >
-                <ScrollView
-                    style={styles.flex1}
-                    contentContainerStyle={[styles.scrollContent, { paddingBottom: FOOTER_HEIGHT + insets.bottom }]}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="interactive"
-                >
-                    {/* 1. TITLE - First element */}
-                    <TextInput
-                        style={styles.titleInput}
-                        value={title}
-                        onChangeText={setTitle}
-                        placeholder="Titre de l'événement"
-                        placeholderTextColor="#B0B0B0"
-                        returnKeyType="next"
-                    />
-
-                    {/* 2. THEME TAGS - Compact iOS style */}
+                <Pressable style={styles.flex1} onPress={dismissKeyboardAndPicker}>
                     <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.themeScroll}
-                        contentContainerStyle={styles.themeTags}
+                        style={styles.flex1}
+                        contentContainerStyle={[styles.scrollContent, { paddingBottom: FOOTER_HEIGHT + insets.bottom }]}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="interactive"
+                        onScrollBeginDrag={dismissKeyboardAndPicker}
                     >
-                        {availableThemes.map(t => {
-                            const isSelected = selectedThemeId === t.id;
-                            return (
-                                <TouchableOpacity
-                                    key={t.id}
-                                    onPress={() => {
-                                        setSelectedThemeId(prev => prev === t.id ? null : t.id);
-                                        Haptics.selectionAsync();
-                                    }}
-                                    style={[
-                                        styles.themeTag,
-                                        { borderColor: t.colorHex },
-                                        isSelected && { backgroundColor: t.colorHex + '30' }
-                                    ]}
-                                >
-                                    <View style={[styles.themeTagDot, { backgroundColor: t.colorHex }]} />
-                                    <Text style={[styles.themeTagText, { color: t.colorHex }]}>
-                                        {t.name}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </ScrollView>
-
-                    {/* 3. DATE - Selected first */}
-                    <Text style={styles.sectionLabel}>Date</Text>
-                    <ScrollView
-                        ref={dateScrollRef}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.dateScroll}
-                        contentContainerStyle={styles.datePills}
-                    >
-                        {dateOptions.map((opt, i) => {
-                            const isSelected = opt.isSelected;
-                            return (
-                                <TouchableOpacity
-                                    key={i}
-                                    onPress={() => {
-                                        setSelectedDate(opt.date);
-                                        Haptics.selectionAsync();
-                                    }}
-                                    style={[
-                                        styles.datePill,
-                                        isSelected && styles.datePillSelected,
-                                        opt.isToday && !isSelected && styles.datePillToday
-                                    ]}
-                                >
-                                    <Text style={[
-                                        styles.datePillText,
-                                        isSelected && styles.datePillTextSelected
-                                    ]}>
-                                        {opt.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </ScrollView>
-
-                    {/* 4. TIME - Centered with iOS picker */}
-                    <Text style={styles.sectionLabel}>Heure de début</Text>
-                    <TouchableOpacity
-                        style={styles.timePickerBtn}
-                        onPress={() => setShowTimePicker(true)}
-                    >
-                        <Text style={styles.timeValue}>
-                            {startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                        </Text>
-                        <Ionicons name="time-outline" size={20} color="#888" />
-                    </TouchableOpacity>
-
-                    {showTimePicker && (
-                        <DateTimePicker
-                            value={startTime}
-                            mode="time"
-                            is24Hour={true}
-                            minuteInterval={5}
-                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                            onChange={handleTimeChange}
-                            style={styles.timePicker}
+                        {/* 1. TITLE - First element with autofocus */}
+                        <TextInput
+                            ref={titleInputRef}
+                            style={styles.titleInput}
+                            value={title}
+                            onChangeText={setTitle}
+                            placeholder="Titre de l'événement"
+                            placeholderTextColor="#B0B0B0"
+                            returnKeyType="done"
+                            blurOnSubmit={true}
                         />
-                    )}
 
-                    {/* 5. DURATION - Single line horizontal scroll */}
-                    <Text style={styles.sectionLabel}>Durée</Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.durationScroll}
-                        contentContainerStyle={styles.durationRow}
-                    >
-                        {DURATION_PRESETS.map(preset => {
-                            const isSelected = selectedDuration === preset.key;
-                            return (
-                                <TouchableOpacity
-                                    key={preset.key}
-                                    onPress={() => {
-                                        setSelectedDuration(preset.key);
-                                        Haptics.selectionAsync();
-                                    }}
-                                    style={[styles.durationBtn, isSelected && styles.durationBtnSelected]}
-                                >
-                                    <Text style={[styles.durationBtnText, isSelected && styles.durationBtnTextSelected]}>
-                                        {preset.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            );
-                        })}
-                        <TouchableOpacity
-                            onPress={() => setShowCustomDuration(true)}
-                            style={[styles.durationBtn, selectedDuration === 'custom' && styles.durationBtnSelected]}
+                        {/* 2. THEME TAGS - Compact iOS style */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.themeScroll}
+                            contentContainerStyle={styles.themeTags}
                         >
-                            <Text style={[styles.durationBtnText, selectedDuration === 'custom' && styles.durationBtnTextSelected]}>
-                                {selectedDuration === 'custom' ? `${Math.floor(customDurationMinutes / 60)}h${customDurationMinutes % 60 || ''}` : 'Perso'}
-                            </Text>
-                        </TouchableOpacity>
-                    </ScrollView>
-
-                    {/* RECAP BANNER */}
-                    <View style={styles.recapBanner}>
-                        <Ionicons name="calendar-outline" size={16} color={theme.colors.accent} />
-                        <Text style={styles.recapText}>{recapText}</Text>
-                    </View>
-
-                    {/* 6. RECURRENCE - Simple toggle + 4 options */}
-                    <View style={styles.recurrenceRow}>
-                        <View style={styles.recurrenceLeft}>
-                            <Ionicons name="repeat" size={18} color="#666" />
-                            <Text style={styles.recurrenceLabel}>Récurrence</Text>
-                        </View>
-                        <Switch
-                            value={recurrenceEnabled}
-                            onValueChange={(v) => {
-                                setRecurrenceEnabled(v);
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            }}
-                            trackColor={{ false: '#E0E0E0', true: theme.colors.accent + '60' }}
-                            thumbColor={recurrenceEnabled ? theme.colors.accent : '#F0F0F0'}
-                        />
-                    </View>
-
-                    {recurrenceEnabled && (
-                        <Animated.View entering={FadeIn.duration(150)} style={styles.recurrenceOptions}>
-                            {RECURRENCE_OPTIONS.map(opt => {
-                                const isSelected = recurrenceType === opt.key;
+                            {availableThemes.map(t => {
+                                const isSelected = selectedThemeId === t.id;
                                 return (
                                     <TouchableOpacity
-                                        key={opt.key}
+                                        key={t.id}
                                         onPress={() => {
-                                            setRecurrenceType(opt.key);
+                                            setSelectedThemeId(prev => prev === t.id ? null : t.id);
                                             Haptics.selectionAsync();
                                         }}
-                                        style={[styles.recurrenceBtn, isSelected && styles.recurrenceBtnSelected]}
+                                        style={[
+                                            styles.themeTag,
+                                            { borderColor: t.colorHex },
+                                            isSelected && { backgroundColor: t.colorHex + '30' }
+                                        ]}
                                     >
-                                        <Text style={[styles.recurrenceBtnText, isSelected && styles.recurrenceBtnTextSelected]}>
+                                        <View style={[styles.themeTagDot, { backgroundColor: t.colorHex }]} />
+                                        <Text style={[styles.themeTagText, { color: t.colorHex }]}>
+                                            {t.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </ScrollView>
+
+                        {/* 3. DATE - Selected first */}
+                        <Text style={styles.sectionLabel}>Date</Text>
+                        <ScrollView
+                            ref={dateScrollRef}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.dateScroll}
+                            contentContainerStyle={styles.datePills}
+                        >
+                            {dateOptions.map((opt, i) => {
+                                const isSelected = opt.isSelected;
+                                return (
+                                    <TouchableOpacity
+                                        key={i}
+                                        onPress={() => {
+                                            setSelectedDate(opt.date);
+                                            Haptics.selectionAsync();
+                                        }}
+                                        style={[
+                                            styles.datePill,
+                                            isSelected && styles.datePillSelected,
+                                            opt.isToday && !isSelected && styles.datePillToday
+                                        ]}
+                                    >
+                                        <Text style={[
+                                            styles.datePillText,
+                                            isSelected && styles.datePillTextSelected
+                                        ]}>
                                             {opt.label}
                                         </Text>
                                     </TouchableOpacity>
                                 );
                             })}
-                        </Animated.View>
-                    )}
+                        </ScrollView>
 
-                    {/* 7. DETAILS - Collapsed */}
-                    <TouchableOpacity
-                        style={styles.detailsToggle}
-                        onPress={() => {
-                            setDetailsExpanded(!detailsExpanded);
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        }}
-                    >
-                        <Text style={styles.detailsToggleText}>Détails</Text>
-                        <Ionicons name={detailsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
-                    </TouchableOpacity>
+                        {/* 4. TIME - Tap to toggle iOS picker */}
+                        <Text style={styles.sectionLabel}>Heure de début</Text>
+                        <TouchableOpacity
+                            style={styles.timePickerBtn}
+                            onPress={() => setShowTimePicker(prev => !prev)}
+                        >
+                            <Text style={styles.timeValue}>
+                                {startTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </Text>
+                            <Ionicons name={showTimePicker ? "chevron-up" : "time-outline"} size={20} color="#888" />
+                        </TouchableOpacity>
 
-                    {detailsExpanded && (
-                        <Animated.View entering={FadeIn.duration(150)} style={styles.detailsSection}>
-                            <TextInput
-                                style={styles.descriptionInput}
-                                value={description}
-                                onChangeText={setDescription}
-                                placeholder="Description..."
-                                placeholderTextColor="#B0B0B0"
-                                multiline
+                        {showTimePicker && (
+                            <DateTimePicker
+                                value={startTime}
+                                mode="time"
+                                is24Hour={true}
+                                minuteInterval={5}
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={handleTimeChange}
+                                style={styles.timePicker}
                             />
-                            <TextInput
-                                style={styles.locationInput}
-                                value={location}
-                                onChangeText={setLocation}
-                                placeholder="Lieu..."
-                                placeholderTextColor="#B0B0B0"
+                        )}
+
+                        {/* 5. DURATION - Single line horizontal scroll */}
+                        <Text style={styles.sectionLabel}>Durée</Text>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.durationScroll}
+                            contentContainerStyle={styles.durationRow}
+                        >
+                            {DURATION_PRESETS.map(preset => {
+                                const isSelected = selectedDuration === preset.key;
+                                return (
+                                    <TouchableOpacity
+                                        key={preset.key}
+                                        onPress={() => {
+                                            setSelectedDuration(preset.key);
+                                            Haptics.selectionAsync();
+                                        }}
+                                        style={[styles.durationBtn, isSelected && styles.durationBtnSelected]}
+                                    >
+                                        <Text style={[styles.durationBtnText, isSelected && styles.durationBtnTextSelected]}>
+                                            {preset.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                            <TouchableOpacity
+                                onPress={() => setShowCustomDuration(true)}
+                                style={[styles.durationBtn, selectedDuration === 'custom' && styles.durationBtnSelected]}
+                            >
+                                <Text style={[styles.durationBtnText, selectedDuration === 'custom' && styles.durationBtnTextSelected]}>
+                                    {selectedDuration === 'custom' ? `${Math.floor(customDurationMinutes / 60)}h${customDurationMinutes % 60 || ''}` : 'Autre..'}
+                                </Text>
+                            </TouchableOpacity>
+                        </ScrollView>
+
+                        {/* RECAP BANNER - Centered */}
+                        <View style={styles.recapBanner}>
+                            <Ionicons name="calendar-outline" size={16} color={theme.colors.accent} />
+                            <Text style={styles.recapText}>{recapText}</Text>
+                        </View>
+
+                        {/* 6. RECURRENCE - Simple toggle + 4 options */}
+                        <View style={styles.recurrenceRow}>
+                            <View style={styles.recurrenceLeft}>
+                                <Ionicons name="repeat" size={18} color="#666" />
+                                <Text style={styles.recurrenceLabel}>Récurrence</Text>
+                            </View>
+                            <Switch
+                                value={recurrenceEnabled}
+                                onValueChange={(v) => {
+                                    setRecurrenceEnabled(v);
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                }}
+                                trackColor={{ false: '#E0E0E0', true: theme.colors.accent + '60' }}
+                                thumbColor={recurrenceEnabled ? theme.colors.accent : '#F0F0F0'}
                             />
-                        </Animated.View>
-                    )}
-                </ScrollView>
+                        </View>
+
+                        {recurrenceEnabled && (
+                            <Animated.View entering={FadeIn.duration(150)} style={styles.recurrenceOptions}>
+                                {RECURRENCE_OPTIONS.map(opt => {
+                                    const isSelected = recurrenceType === opt.key;
+                                    return (
+                                        <TouchableOpacity
+                                            key={opt.key}
+                                            onPress={() => {
+                                                setRecurrenceType(opt.key);
+                                                Haptics.selectionAsync();
+                                            }}
+                                            style={[styles.recurrenceBtn, isSelected && styles.recurrenceBtnSelected]}
+                                        >
+                                            <Text style={[styles.recurrenceBtnText, isSelected && styles.recurrenceBtnTextSelected]}>
+                                                {opt.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </Animated.View>
+                        )}
+
+                        {/* 7. DETAILS - Collapsed */}
+                        <TouchableOpacity
+                            style={styles.detailsToggle}
+                            onPress={() => {
+                                setDetailsExpanded(!detailsExpanded);
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }}
+                        >
+                            <Text style={styles.detailsToggleText}>Détails</Text>
+                            <Ionicons name={detailsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+                        </TouchableOpacity>
+
+                        {detailsExpanded && (
+                            <Animated.View entering={FadeIn.duration(150)} style={styles.detailsSection}>
+                                <TextInput
+                                    style={styles.descriptionInput}
+                                    value={description}
+                                    onChangeText={setDescription}
+                                    placeholder="Description..."
+                                    placeholderTextColor="#B0B0B0"
+                                    multiline
+                                />
+                                <TextInput
+                                    style={styles.locationInput}
+                                    value={location}
+                                    onChangeText={setLocation}
+                                    placeholder="Lieu..."
+                                    placeholderTextColor="#B0B0B0"
+                                />
+                            </Animated.View>
+                        )}
+                    </ScrollView>
+                </Pressable>
 
                 {/* STICKY FOOTER */}
                 <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -665,6 +679,7 @@ const styles = StyleSheet.create({
     recapBanner: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
         marginVertical: 16,
         paddingVertical: 10,
@@ -676,6 +691,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
         color: theme.colors.accent,
+        textAlign: 'center',
     },
 
     // Recurrence
@@ -697,6 +713,7 @@ const styles = StyleSheet.create({
     },
     recurrenceOptions: {
         flexDirection: 'row',
+        justifyContent: 'center',
         gap: 8,
         marginBottom: 8,
     },
