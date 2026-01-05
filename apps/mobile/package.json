@@ -49,6 +49,7 @@
   },
   "devDependencies": {
     "babel-preset-expo": "^54.0.9",
+    "react-refresh": "^0.18.0",
     "typescript": "~5.9.2"
   },
   "overrides": {

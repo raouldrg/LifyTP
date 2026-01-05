@@ -498,34 +498,7 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                             </TouchableOpacity>
                         </ScrollView>
 
-                        {/* 2.5 MEDIA ZONE */}
-                        <View style={styles.mediaSection}>
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.mediaGrid}
-                            >
-                                {selectedMedia.map((uri, index) => (
-                                    <View key={uri} style={styles.mediaItem}>
-                                        <Image source={{ uri }} style={styles.mediaThumbnail} />
-                                        <TouchableOpacity
-                                            style={styles.mediaDeleteBtn}
-                                            onPress={() => handleRemoveMedia(uri)}
-                                        >
-                                            <Ionicons name="close-circle" size={22} color="#FFF" />
-                                        </TouchableOpacity>
-                                    </View>
-                                ))}
-                                {selectedMedia.length < MAX_MEDIA && (
-                                    <TouchableOpacity
-                                        style={styles.mediaAddBtn}
-                                        onPress={handleAddMedia}
-                                    >
-                                        <Ionicons name="camera" size={24} color="#888" />
-                                    </TouchableOpacity>
-                                )}
-                            </ScrollView>
-                        </View>
+
 
                         {/* 3. DATE - Infinite scroll with month overlay */}
                         <View style={styles.dateContainer}>
@@ -656,7 +629,45 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                             </Animated.View>
                         )}
 
-                        {/* 7. DETAILS - Collapsed */}
+
+                        {/* 7. MEDIA ZONE (Centered Button) */}
+                        <View style={styles.mediaSection}>
+                            {/* Centered Add Button */}
+                            {selectedMedia.length < MAX_MEDIA && (
+                                <View style={styles.mediaAddContainer}>
+                                    <TouchableOpacity
+                                        style={styles.mediaAddBtn}
+                                        onPress={handleAddMedia}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Ionicons name="add" size={28} color="#FFF" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* Thumbnails below */}
+                            {selectedMedia.length > 0 && (
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.mediaGrid}
+                                >
+                                    {selectedMedia.map((uri) => (
+                                        <View key={uri} style={styles.mediaItem}>
+                                            <Image source={{ uri }} style={styles.mediaThumbnail} />
+                                            <TouchableOpacity
+                                                style={styles.mediaDeleteBtn}
+                                                onPress={() => handleRemoveMedia(uri)}
+                                            >
+                                                <Ionicons name="close-circle" size={22} color="#FFF" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            )}
+                        </View>
+
+                        {/* 8. DETAILS - Collapsed */}
                         <TouchableOpacity
                             style={styles.detailsToggle}
                             onPress={() => {
@@ -664,7 +675,6 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             }}
                         >
-                            <Text style={styles.detailsToggleText}>Détails</Text>
                             <Ionicons name={detailsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
                         </TouchableOpacity>
 
@@ -924,40 +934,50 @@ const styles = StyleSheet.create({
 
     // Media Zone
     mediaSection: {
-        marginTop: 12,
-        marginBottom: 4,
+        marginBottom: 24,
+    },
+    mediaAddContainer: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    mediaAddBtn: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.accent,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: theme.colors.accent,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     mediaGrid: {
         flexDirection: 'row',
-        gap: 8,
-        paddingVertical: 4,
+        gap: 12,
+        paddingHorizontal: 4,
+        justifyContent: 'center',
     },
     mediaItem: {
         position: 'relative',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
     mediaThumbnail: {
-        width: 70,
-        height: 70,
-        borderRadius: 10,
+        width: 80,
+        height: 80,
+        borderRadius: 12,
         backgroundColor: '#F0F0F0',
     },
     mediaDeleteBtn: {
         position: 'absolute',
-        top: -6,
-        right: -6,
+        top: -8,
+        right: -8,
         backgroundColor: 'rgba(0,0,0,0.6)',
-        borderRadius: 11,
-    },
-    mediaAddBtn: {
-        width: 70,
-        height: 70,
-        borderRadius: 10,
-        backgroundColor: '#F5F5F5',
-        borderWidth: 1.5,
-        borderColor: '#E0E0E0',
-        borderStyle: 'dashed',
-        alignItems: 'center',
-        justifyContent: 'center',
+        borderRadius: 12,
     },
 
     // Date Container with overlay
