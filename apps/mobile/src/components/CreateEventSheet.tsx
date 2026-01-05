@@ -1,20 +1,23 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
-    View, Text, StyleSheet,
+    View, Text, StyleSheet, Image, Alert,
     TextInput, TouchableOpacity, Pressable,
     KeyboardAvoidingView, Platform, ScrollView, FlatList,
-    Keyboard, Modal, Dimensions, Switch
+    Keyboard, Modal, Dimensions, Switch, ActivityIndicator
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { theme } from '../theme';
 import { CalendarEvent } from '../types/events';
 import { UserTheme, DEFAULT_THEMES } from '../constants/eventThemes';
 import { getAllThemes } from '../services/themeService';
 import * as Haptics from 'expo-haptics';
+
+const MAX_MEDIA = 5;
 
 // ============================================================
 // TYPES
@@ -98,6 +101,10 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     const [visibility, setVisibility] = useState<VisibilityType>('private');
     const [monthOverlay, setMonthOverlay] = useState<string | null>(null);
     const monthOverlayTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Media state
+    const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // ============================================================
     // SORTED THEMES - Recent first
@@ -226,6 +233,38 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
             await AsyncStorage.setItem(RECENT_THEMES_KEY, JSON.stringify(updated));
         }
     }, [selectedThemeId, recentThemeIds]);
+
+    // Media picker - opens camera directly with gallery access
+    const handleAddMedia = useCallback(async () => {
+        if (selectedMedia.length >= MAX_MEDIA) {
+            Alert.alert('Limite atteinte', `Maximum ${MAX_MEDIA} médias par événement.`);
+            return;
+        }
+
+        // Request permissions
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permission refusée', 'L\'accès à la caméra est nécessaire.');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images', 'videos'],
+            allowsEditing: false,
+            quality: 0.8,
+            videoMaxDuration: 60,
+        });
+
+        if (!result.canceled && result.assets[0]) {
+            setSelectedMedia(prev => [...prev, result.assets[0].uri]);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+    }, [selectedMedia.length]);
+
+    const handleRemoveMedia = useCallback((uri: string) => {
+        setSelectedMedia(prev => prev.filter(m => m !== uri));
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }, []);
 
     // Handle month change overlay
     const handleDateViewableChange = useCallback(({ viewableItems }: any) => {
@@ -391,6 +430,35 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                                 );
                             })}
                         </ScrollView>
+
+                        {/* 2.5 MEDIA ZONE */}
+                        <View style={styles.mediaSection}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.mediaGrid}
+                            >
+                                {selectedMedia.map((uri, index) => (
+                                    <View key={uri} style={styles.mediaItem}>
+                                        <Image source={{ uri }} style={styles.mediaThumbnail} />
+                                        <TouchableOpacity
+                                            style={styles.mediaDeleteBtn}
+                                            onPress={() => handleRemoveMedia(uri)}
+                                        >
+                                            <Ionicons name="close-circle" size={22} color="#FFF" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                                {selectedMedia.length < MAX_MEDIA && (
+                                    <TouchableOpacity
+                                        style={styles.mediaAddBtn}
+                                        onPress={handleAddMedia}
+                                    >
+                                        <Ionicons name="camera" size={24} color="#888" />
+                                    </TouchableOpacity>
+                                )}
+                            </ScrollView>
+                        </View>
 
                         {/* 3. DATE - Infinite scroll with month overlay */}
                         <View style={styles.dateContainer}>
@@ -692,6 +760,44 @@ const styles = StyleSheet.create({
     themeTagText: {
         fontSize: 12,
         fontWeight: '500',
+    },
+
+    // Media Zone
+    mediaSection: {
+        marginTop: 12,
+        marginBottom: 4,
+    },
+    mediaGrid: {
+        flexDirection: 'row',
+        gap: 8,
+        paddingVertical: 4,
+    },
+    mediaItem: {
+        position: 'relative',
+    },
+    mediaThumbnail: {
+        width: 70,
+        height: 70,
+        borderRadius: 10,
+        backgroundColor: '#F0F0F0',
+    },
+    mediaDeleteBtn: {
+        position: 'absolute',
+        top: -6,
+        right: -6,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        borderRadius: 11,
+    },
+    mediaAddBtn: {
+        width: 70,
+        height: 70,
+        borderRadius: 10,
+        backgroundColor: '#F5F5F5',
+        borderWidth: 1.5,
+        borderColor: '#E0E0E0',
+        borderStyle: 'dashed',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 
     // Date Container with overlay
