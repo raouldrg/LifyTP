@@ -53,7 +53,22 @@ const RECURRENCE_OPTIONS: { key: RecurrenceType; label: string }[] = [
 
 const FOOTER_HEIGHT = 90;
 const RECENT_THEMES_KEY = '@lify/recent_theme_ids';
-const DATE_ITEM_WIDTH = 70; // Width of each date pill
+const CUSTOM_THEMES_KEY = '@lify/custom_themes';
+const DATE_ITEM_WIDTH = 70;
+
+// Preset color palette for custom themes
+const COLOR_PALETTE = [
+    '#5B8DEF', // Blue
+    '#FF6B6B', // Red
+    '#4ECDC4', // Teal
+    '#FFE66D', // Yellow
+    '#95E1A3', // Green
+    '#DDA0DD', // Plum
+    '#FF9F43', // Orange
+    '#A29BFE', // Purple
+    '#74B9FF', // Light Blue
+    '#FD79A8', // Pink
+];
 
 // Generate date array around a center date
 const generateDateRange = (centerDate: Date, daysBack: number, daysForward: number) => {
@@ -106,14 +121,21 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Custom theme state
+    const [customThemes, setCustomThemes] = useState<UserTheme[]>([]);
+    const [showThemeModal, setShowThemeModal] = useState(false);
+    const [newThemeName, setNewThemeName] = useState('');
+    const [newThemeColor, setNewThemeColor] = useState(COLOR_PALETTE[0]);
+
     // ============================================================
-    // SORTED THEMES - Recent first
+    // SORTED THEMES - Recent first, includes custom themes
     // ============================================================
     const sortedThemes = useMemo(() => {
         const recent: UserTheme[] = [];
         const others: UserTheme[] = [];
+        const allThemes = [...availableThemes, ...customThemes];
 
-        for (const theme of availableThemes) {
+        for (const theme of allThemes) {
             if (recentThemeIds.includes(theme.id)) {
                 recent.push(theme);
             } else {
@@ -125,7 +147,7 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
         recent.sort((a, b) => recentThemeIds.indexOf(a.id) - recentThemeIds.indexOf(b.id));
 
         return [...recent, ...others];
-    }, [availableThemes, recentThemeIds]);
+    }, [availableThemes, customThemes, recentThemeIds]);
 
     // ============================================================
     // COMPUTED VALUES
@@ -163,16 +185,18 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     // ============================================================
     useEffect(() => {
         if (visible) {
-            // Load themes and recent theme IDs
+            // Load themes, recent theme IDs, and custom themes
             Promise.all([
                 getAllThemes(),
-                AsyncStorage.getItem(RECENT_THEMES_KEY)
-            ]).then(([themes, recentJson]) => {
+                AsyncStorage.getItem(RECENT_THEMES_KEY),
+                AsyncStorage.getItem(CUSTOM_THEMES_KEY)
+            ]).then(([themes, recentJson, customJson]) => {
                 setAvailableThemes(themes);
                 if (recentJson) {
-                    try {
-                        setRecentThemeIds(JSON.parse(recentJson));
-                    } catch { }
+                    try { setRecentThemeIds(JSON.parse(recentJson)); } catch { }
+                }
+                if (customJson) {
+                    try { setCustomThemes(JSON.parse(customJson)); } catch { }
                 }
             });
 
@@ -265,6 +289,34 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
         setSelectedMedia(prev => prev.filter(m => m !== uri));
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }, []);
+
+    // Create custom theme
+    const handleCreateTheme = useCallback(async () => {
+        if (!newThemeName.trim()) return;
+
+        const newTheme: UserTheme = {
+            id: `custom_${Date.now()}`,
+            name: newThemeName.trim(),
+            colorHex: newThemeColor,
+            isCustom: true,
+        };
+
+        const updated = [...customThemes, newTheme];
+        setCustomThemes(updated);
+        await AsyncStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(updated));
+
+        // Select and add to recents
+        setSelectedThemeId(newTheme.id);
+        const recentUpdated = [newTheme.id, ...recentThemeIds.filter(id => id !== newTheme.id)].slice(0, 6);
+        setRecentThemeIds(recentUpdated);
+        await AsyncStorage.setItem(RECENT_THEMES_KEY, JSON.stringify(recentUpdated));
+
+        // Reset modal
+        setShowThemeModal(false);
+        setNewThemeName('');
+        setNewThemeColor(COLOR_PALETTE[0]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }, [newThemeName, newThemeColor, customThemes, recentThemeIds]);
 
     // Handle month change overlay
     const handleDateViewableChange = useCallback(({ viewableItems }: any) => {
@@ -429,6 +481,14 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                                     </TouchableOpacity>
                                 );
                             })}
+                            {/* Add new theme button */}
+                            <TouchableOpacity
+                                onPress={() => setShowThemeModal(true)}
+                                style={styles.themeAddBtn}
+                            >
+                                <Ionicons name="add" size={14} color="#888" />
+                                <Text style={styles.themeAddText}>Nouveau</Text>
+                            </TouchableOpacity>
                         </ScrollView>
 
                         {/* 2.5 MEDIA ZONE */}
@@ -618,6 +678,26 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                                     placeholder="Lieu..."
                                     placeholderTextColor="#B0B0B0"
                                 />
+
+                                {/* Visibility Picker */}
+                                <View style={styles.visibilityContainer}>
+                                    {['private', 'friends', 'public'].map((v) => {
+                                        const type = v as VisibilityType;
+                                        const isSelected = visibility === type;
+                                        const labels: Record<string, string> = { private: 'Privé', friends: 'Amis', public: 'Public' };
+                                        return (
+                                            <TouchableOpacity
+                                                key={type}
+                                                style={[styles.visibilityBtn, isSelected && styles.visibilityBtnSelected]}
+                                                onPress={() => setVisibility(type)}
+                                            >
+                                                <Text style={[styles.visibilityBtnText, isSelected && styles.visibilityBtnTextSelected]}>
+                                                    {labels[type]}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
                             </Animated.View>
                         )}
                     </ScrollView>
@@ -682,6 +762,59 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                         </View>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Custom Theme Modal */}
+            <Modal visible={showThemeModal} transparent animationType="fade">
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Nouveau thème</Text>
+
+                        <TextInput
+                            style={styles.modalInput}
+                            value={newThemeName}
+                            onChangeText={setNewThemeName}
+                            placeholder="Nom du thème"
+                            placeholderTextColor="#999"
+                            autoFocus
+                        />
+
+                        <Text style={styles.modalSectionLabel}>Couleur</Text>
+                        <View style={styles.colorGrid}>
+                            {COLOR_PALETTE.map(color => (
+                                <TouchableOpacity
+                                    key={color}
+                                    onPress={() => {
+                                        setNewThemeColor(color);
+                                        Haptics.selectionAsync();
+                                    }}
+                                    style={[styles.colorCircle, { backgroundColor: color }, newThemeColor === color && styles.colorCircleSelected]}
+                                >
+                                    {newThemeColor === color && <Ionicons name="checkmark" size={16} color="#FFF" />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setShowThemeModal(false);
+                                    setNewThemeName('');
+                                }}
+                                style={styles.modalCancel}
+                            >
+                                <Text style={styles.modalCancelText}>Annuler</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleCreateTheme}
+                                style={[styles.modalConfirm, !newThemeName.trim() && { opacity: 0.5 }]}
+                                disabled={!newThemeName.trim()}
+                            >
+                                <Text style={styles.modalConfirmText}>Créer</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -760,6 +893,22 @@ const styles = StyleSheet.create({
     themeTagText: {
         fontSize: 12,
         fontWeight: '500',
+    },
+    themeAddBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#DDD',
+        borderStyle: 'dashed',
+        gap: 4,
+    },
+    themeAddText: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: '#888',
     },
 
     // Media Zone
@@ -1096,5 +1245,71 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: '#FFF',
+    },
+
+    // Custom Theme Modal UI
+    modalInput: {
+        backgroundColor: '#F5F5F5',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#1A1A1A',
+        marginTop: 16,
+    },
+    modalSectionLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    colorGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        justifyContent: 'center',
+    },
+    colorCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    colorCircleSelected: {
+        borderWidth: 2,
+        borderColor: '#000',
+    },
+
+    // Visibility Picker
+    visibilityContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#EEE',
+        padding: 2,
+        borderRadius: 10,
+        height: 36,
+    },
+    visibilityBtn: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 8,
+    },
+    visibilityBtnSelected: {
+        backgroundColor: '#FFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
+        elevation: 1,
+    },
+    visibilityBtnText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#888',
+    },
+    visibilityBtnTextSelected: {
+        color: '#1A1A1A',
+        fontWeight: '600',
     },
 });

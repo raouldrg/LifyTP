@@ -34,6 +34,7 @@ export interface UserTheme {
     name: string;
     colorHex: string;
     isDefault?: boolean;
+    isCustom?: boolean;
 }
 
 // ==============================================================
