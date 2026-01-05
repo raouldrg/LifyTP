@@ -2,10 +2,11 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import {
     View, Text, StyleSheet,
     TextInput, TouchableOpacity, Pressable,
-    KeyboardAvoidingView, Platform, ScrollView,
+    KeyboardAvoidingView, Platform, ScrollView, FlatList,
     Keyboard, Modal, Dimensions, Switch
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -48,6 +49,23 @@ const RECURRENCE_OPTIONS: { key: RecurrenceType; label: string }[] = [
 ];
 
 const FOOTER_HEIGHT = 90;
+const RECENT_THEMES_KEY = '@lify/recent_theme_ids';
+const DATE_ITEM_WIDTH = 70; // Width of each date pill
+
+// Generate date array around a center date
+const generateDateRange = (centerDate: Date, daysBack: number, daysForward: number) => {
+    const days: { date: Date; key: string }[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = -daysBack; i <= daysForward; i++) {
+        const d = new Date(centerDate);
+        d.setDate(d.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        days.push({ date: d, key: d.toISOString() });
+    }
+    return days;
+};
 
 // ============================================================
 // COMPONENT
@@ -55,7 +73,7 @@ const FOOTER_HEIGHT = 90;
 
 export function CreateEventSheet({ visible, initialDate, initialTime, onClose, onSave }: CreateEventSheetProps) {
     const insets = useSafeAreaInsets();
-    const dateScrollRef = useRef<ScrollView>(null);
+    const dateListRef = useRef<FlatList>(null);
     const titleInputRef = useRef<TextInput>(null);
 
     // ============================================================
@@ -63,8 +81,10 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     // ============================================================
     const [title, setTitle] = useState('');
     const [availableThemes, setAvailableThemes] = useState<UserTheme[]>(DEFAULT_THEMES);
+    const [recentThemeIds, setRecentThemeIds] = useState<string[]>([]);
     const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
     const [selectedDate, setSelectedDate] = useState(new Date());
+    const [dateRange, setDateRange] = useState(() => generateDateRange(new Date(), 30, 90));
     const [startTime, setStartTime] = useState(new Date());
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [selectedDuration, setSelectedDuration] = useState<DurationPreset>('30m');
@@ -76,31 +96,29 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
     const [visibility, setVisibility] = useState<VisibilityType>('private');
+    const [monthOverlay, setMonthOverlay] = useState<string | null>(null);
+    const monthOverlayTimeout = useRef<NodeJS.Timeout | null>(null);
 
     // ============================================================
-    // DATE OPTIONS - Selected date first, then before/after
+    // SORTED THEMES - Recent first
     // ============================================================
-    const dateOptions = useMemo(() => {
-        const days: { date: Date; label: string; isToday: boolean; isSelected: boolean }[] = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+    const sortedThemes = useMemo(() => {
+        const recent: UserTheme[] = [];
+        const others: UserTheme[] = [];
 
-        const selected = new Date(selectedDate);
-        selected.setHours(0, 0, 0, 0);
-
-        // Generate -7 to +14 days around selected date
-        for (let i = -7; i <= 14; i++) {
-            const d = new Date(selected);
-            d.setDate(d.getDate() + i);
-            const isToday = d.getTime() === today.getTime();
-            const isSelectedDay = i === 0;
-            const label = isToday
-                ? "Auj."
-                : d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
-            days.push({ date: d, label, isToday, isSelected: isSelectedDay });
+        for (const theme of availableThemes) {
+            if (recentThemeIds.includes(theme.id)) {
+                recent.push(theme);
+            } else {
+                others.push(theme);
+            }
         }
-        return days;
-    }, [selectedDate]);
+
+        // Sort recent by order in recentThemeIds
+        recent.sort((a, b) => recentThemeIds.indexOf(a.id) - recentThemeIds.indexOf(b.id));
+
+        return [...recent, ...others];
+    }, [availableThemes, recentThemeIds]);
 
     // ============================================================
     // COMPUTED VALUES
@@ -138,9 +156,24 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     // ============================================================
     useEffect(() => {
         if (visible) {
-            getAllThemes().then(setAvailableThemes);
+            // Load themes and recent theme IDs
+            Promise.all([
+                getAllThemes(),
+                AsyncStorage.getItem(RECENT_THEMES_KEY)
+            ]).then(([themes, recentJson]) => {
+                setAvailableThemes(themes);
+                if (recentJson) {
+                    try {
+                        setRecentThemeIds(JSON.parse(recentJson));
+                    } catch { }
+                }
+            });
 
-            if (initialDate) setSelectedDate(initialDate);
+            // Set initial date and generate range around it
+            const initial = initialDate || new Date();
+            setSelectedDate(initial);
+            setDateRange(generateDateRange(initial, 30, 90));
+
             if (initialTime) {
                 const [h, m] = initialTime.split(':').map(Number);
                 const time = new Date();
@@ -155,13 +188,14 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
             setDetailsExpanded(false);
             setDescription('');
             setLocation('');
+            setShowTimePicker(false);
 
-            // Scroll to selected date (index 7 = center of -7 to +14)
+            // Scroll to selected date and autofocus
             setTimeout(() => {
-                dateScrollRef.current?.scrollTo({ x: 0, animated: false });
-                // Autofocus title input
+                // Find index of selected date (it's at position 30 since we generate -30 to +90)
+                dateListRef.current?.scrollToIndex({ index: 30, animated: false, viewPosition: 0 });
                 titleInputRef.current?.focus();
-            }, 150);
+            }, 200);
         }
     }, [visible, initialDate, initialTime]);
 
@@ -177,6 +211,39 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
     const dismissKeyboardAndPicker = useCallback(() => {
         Keyboard.dismiss();
         setShowTimePicker(false);
+    }, []);
+
+    // Save theme as recent when selected
+    const handleThemeSelect = useCallback(async (themeId: string) => {
+        const newId = selectedThemeId === themeId ? null : themeId;
+        setSelectedThemeId(newId);
+        Haptics.selectionAsync();
+
+        if (newId) {
+            // Add to recent, dedupe, limit to 6
+            const updated = [newId, ...recentThemeIds.filter(id => id !== newId)].slice(0, 6);
+            setRecentThemeIds(updated);
+            await AsyncStorage.setItem(RECENT_THEMES_KEY, JSON.stringify(updated));
+        }
+    }, [selectedThemeId, recentThemeIds]);
+
+    // Handle month change overlay
+    const handleDateViewableChange = useCallback(({ viewableItems }: any) => {
+        if (viewableItems.length > 0) {
+            const firstVisible = viewableItems[0].item.date as Date;
+            const monthLabel = firstVisible.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+            setMonthOverlay(prev => {
+                if (prev !== monthLabel) {
+                    // Clear existing timeout
+                    if (monthOverlayTimeout.current) clearTimeout(monthOverlayTimeout.current);
+                    // Hide after 2s
+                    monthOverlayTimeout.current = setTimeout(() => setMonthOverlay(null), 2000);
+                    return monthLabel;
+                }
+                return prev;
+            });
+        }
     }, []);
 
     const handleTimeChange = useCallback((_: any, date?: Date) => {
@@ -211,6 +278,38 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
         onSave(newEvent);
         handleClose();
     }, [canSave, title, description, selectedThemeId, availableThemes, startDateTime, endDateTime, onSave, handleClose]);
+
+    // Render date item for FlatList
+    const renderDateItem = useCallback(({ item }: { item: { date: Date; key: string } }) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const itemDate = new Date(item.date);
+        itemDate.setHours(0, 0, 0, 0);
+        const selectedNorm = new Date(selectedDate);
+        selectedNorm.setHours(0, 0, 0, 0);
+
+        const isToday = itemDate.getTime() === today.getTime();
+        const isSelected = itemDate.getTime() === selectedNorm.getTime();
+        const label = isToday ? "Auj." : item.date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' });
+
+        return (
+            <TouchableOpacity
+                onPress={() => {
+                    setSelectedDate(item.date);
+                    Haptics.selectionAsync();
+                }}
+                style={[
+                    styles.datePill,
+                    isSelected && styles.datePillSelected,
+                    isToday && !isSelected && styles.datePillToday
+                ]}
+            >
+                <Text style={[styles.datePillText, isSelected && styles.datePillTextSelected]}>
+                    {label}
+                </Text>
+            </TouchableOpacity>
+        );
+    }, [selectedDate]);
 
     // ============================================================
     // RENDER
@@ -254,22 +353,19 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                             blurOnSubmit={true}
                         />
 
-                        {/* 2. THEME TAGS - Compact iOS style */}
+                        {/* 2. THEME TAGS - Recent first, compact iOS style */}
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.themeScroll}
                             contentContainerStyle={styles.themeTags}
                         >
-                            {availableThemes.map(t => {
+                            {sortedThemes.map(t => {
                                 const isSelected = selectedThemeId === t.id;
                                 return (
                                     <TouchableOpacity
                                         key={t.id}
-                                        onPress={() => {
-                                            setSelectedThemeId(prev => prev === t.id ? null : t.id);
-                                            Haptics.selectionAsync();
-                                        }}
+                                        onPress={() => handleThemeSelect(t.id)}
                                         style={[
                                             styles.themeTag,
                                             { borderColor: t.colorHex },
@@ -285,40 +381,30 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                             })}
                         </ScrollView>
 
-                        {/* 3. DATE - Selected first */}
-                        <Text style={styles.sectionLabel}>Date</Text>
-                        <ScrollView
-                            ref={dateScrollRef}
+                        {/* 3. DATE - Infinite scroll with month overlay */}
+                        <View style={styles.dateContainer}>
+                            <Text style={styles.sectionLabel}>Date</Text>
+                            {monthOverlay && (
+                                <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)} style={styles.monthOverlay}>
+                                    <Text style={styles.monthOverlayText}>{monthOverlay}</Text>
+                                </Animated.View>
+                            )}
+                        </View>
+                        <FlatList
+                            ref={dateListRef}
                             horizontal
+                            data={dateRange}
+                            keyExtractor={(item) => item.key}
+                            renderItem={renderDateItem}
                             showsHorizontalScrollIndicator={false}
                             style={styles.dateScroll}
                             contentContainerStyle={styles.datePills}
-                        >
-                            {dateOptions.map((opt, i) => {
-                                const isSelected = opt.isSelected;
-                                return (
-                                    <TouchableOpacity
-                                        key={i}
-                                        onPress={() => {
-                                            setSelectedDate(opt.date);
-                                            Haptics.selectionAsync();
-                                        }}
-                                        style={[
-                                            styles.datePill,
-                                            isSelected && styles.datePillSelected,
-                                            opt.isToday && !isSelected && styles.datePillToday
-                                        ]}
-                                    >
-                                        <Text style={[
-                                            styles.datePillText,
-                                            isSelected && styles.datePillTextSelected
-                                        ]}>
-                                            {opt.label}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
+                            getItemLayout={(_, index) => ({ length: DATE_ITEM_WIDTH, offset: DATE_ITEM_WIDTH * index, index })}
+                            onViewableItemsChanged={handleDateViewableChange}
+                            viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
+                            initialScrollIndex={30}
+                            onScrollToIndexFailed={() => { }}
+                        />
 
                         {/* 4. TIME - Tap to toggle iOS picker */}
                         <Text style={styles.sectionLabel}>Heure de début</Text>
@@ -597,6 +683,25 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
 
+    // Date Container with overlay
+    dateContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    monthOverlay: {
+        backgroundColor: theme.colors.accent + '20',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+    },
+    monthOverlayText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: theme.colors.accent,
+        textTransform: 'capitalize',
+    },
+
     // Date Pills
     dateScroll: {
         marginBottom: 4,
@@ -606,10 +711,11 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     datePill: {
-        paddingHorizontal: 12,
+        width: DATE_ITEM_WIDTH - 6, // Account for gap
         paddingVertical: 6,
         borderRadius: 14,
         backgroundColor: '#F5F5F5',
+        alignItems: 'center',
     },
     datePillSelected: {
         backgroundColor: theme.colors.accent,
