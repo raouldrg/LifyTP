@@ -28,7 +28,7 @@ interface CreateEventSheetProps {
     initialDate?: Date;
     initialTime?: string;
     onClose: () => void;
-    onSave: (event: CalendarEvent) => void;
+    onSave: (event: CalendarEvent) => void | Promise<void>;
 }
 
 type DurationPreset = '15m' | '30m' | '45m' | '1h' | '1h30' | '2h' | 'custom';
@@ -347,8 +347,8 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
         }
     }, []);
 
-    const handleSave = useCallback(() => {
-        if (!canSave) return;
+    const handleSave = useCallback(async () => {
+        if (!canSave || isSubmitting) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         const selectedTheme = availableThemes.find(t => t.id === selectedThemeId);
@@ -377,9 +377,16 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
             recurrenceEndAt: recurrenceEnd,
         };
 
-        onSave(newEvent);
-        handleClose();
-    }, [canSave, title, description, selectedThemeId, availableThemes, startDateTime, endDateTime, recurrenceEnabled, recurrenceType, onSave, handleClose]);
+        try {
+            setIsSubmitting(true);
+            await onSave(newEvent);
+            handleClose();
+        } catch (error) {
+            console.error('Failed to save event:', error);
+            Alert.alert('Erreur', 'Impossible de créer l\'événement. Veuillez réessayer.');
+            setIsSubmitting(false);
+        }
+    }, [canSave, isSubmitting, title, description, selectedThemeId, availableThemes, startDateTime, endDateTime, recurrenceEnabled, recurrenceType, onSave, handleClose, selectedMedia, location, visibility]);
 
     // Render date item for FlatList
     const renderDateItem = useCallback(({ item }: { item: { date: Date; key: string } }) => {
@@ -707,12 +714,16 @@ export function CreateEventSheet({ visible, initialDate, initialTime, onClose, o
                 <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
                     <TouchableOpacity
                         onPress={handleSave}
-                        disabled={!canSave}
-                        style={[styles.createBtn, !canSave && styles.createBtnDisabled]}
+                        disabled={!canSave || isSubmitting}
+                        style={[styles.createBtn, (!canSave || isSubmitting) && styles.createBtnDisabled]}
                     >
-                        <Text style={[styles.createBtnText, !canSave && styles.createBtnTextDisabled]}>
-                            Créer l'événement
-                        </Text>
+                        {isSubmitting ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <Text style={[styles.createBtnText, !canSave && styles.createBtnTextDisabled]}>
+                                Créer l'événement
+                            </Text>
+                        )}
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
