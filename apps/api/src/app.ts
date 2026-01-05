@@ -45,9 +45,17 @@ export async function buildApp() {
 
     await app.register(cors, { origin: ORIGIN === '*' ? true : ORIGIN })
 
-    // Explicit Logging Middleware for Debugging
+    // Request logging with timing
     app.addHook('onRequest', async (req, reply) => {
-        console.log(`[REQ] ${req.method} ${req.url} from ${req.ip}`);
+        (req as any).startTime = Date.now();
+        console.log(`[REQ→] ${req.method} ${req.url} from ${req.ip}`);
+    });
+
+    app.addHook('onResponse', async (req, reply) => {
+        const duration = Date.now() - ((req as any).startTime || Date.now());
+        const status = reply.statusCode;
+        const emoji = status >= 400 ? '❌' : status >= 300 ? '↩️' : '✓';
+        console.log(`[RES←] ${emoji} ${req.method} ${req.url} ${status} ${duration}ms`);
     });
 
     // Health Check - FIRST to be registered for max reliability

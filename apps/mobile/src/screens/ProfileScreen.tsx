@@ -21,6 +21,7 @@ import { ProfileTimeline } from '../components/ProfileTimeline';
 import { CalendarEvent } from '../types/events';
 import { DEFAULT_THEMES } from '../constants/eventThemes';
 import { EventEditSheet } from '../components/EventEditSheet';
+import { CreateEventSheet } from '../components/CreateEventSheet';
 import {
     getEvents, createEvent, updateEvent, deleteEvent as deleteEventApi,
     getCachedEvents, setCachedEvents, apiEventToCalendarEvent
@@ -77,7 +78,10 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [isLoadingEvents, setIsLoadingEvents] = useState(false);
     const [isSheetVisible, setSheetVisible] = useState(false);
+    const [isCreateSheetVisible, setCreateSheetVisible] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+    const [createEventDate, setCreateEventDate] = useState<Date | undefined>(undefined);
+    const [createEventTime, setCreateEventTime] = useState<string | undefined>(undefined);
     const [profileStats, setProfileStats] = useState({ followers: 0, following: 0, eventsCount: 0 });
     const [isFollowing, setIsFollowing] = useState(false);
     const [followRequestStatus, setFollowRequestStatus] = useState<string | null>(null);
@@ -103,12 +107,12 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     useEffect(() => {
         if (!isOwnProfile) return;
         const parent = navigation.getParent();
-        if (isSheetVisible) {
+        if (isSheetVisible || isCreateSheetVisible) {
             parent?.setOptions({ tabBarStyle: { display: 'none' } });
         } else {
             parent?.setOptions({ tabBarStyle: undefined });
         }
-    }, [isSheetVisible, navigation, isOwnProfile]);
+    }, [isSheetVisible, isCreateSheetVisible, navigation, isOwnProfile]);
 
     // Fetch profile user data (for other users)
     useEffect(() => {
@@ -444,18 +448,14 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
     const handleEmptySlotPress = (dayIndex: number, startAt: string) => {
         if (!isOwnProfile) return; // Read-only for other profiles
 
-        const draftEvent: CalendarEvent = {
-            userId: currentUser?.id || 'me',
-            title: '',
-            description: '',
-            theme: 'Travail',
-            color: DEFAULT_THEMES[0].colorHex,
-            startAt: startAt,
-            endAt: new Date(new Date(startAt).getTime() + 3600000).toISOString(),
-            dayIndex
-        };
-        setSelectedEvent(draftEvent);
-        setSheetVisible(true);
+        // Parse the date and time from startAt
+        const startDate = new Date(startAt);
+        const hours = String(startDate.getHours()).padStart(2, '0');
+        const minutes = String(Math.floor(startDate.getMinutes() / 5) * 5).padStart(2, '0');
+
+        setCreateEventDate(startDate);
+        setCreateEventTime(`${hours}:${minutes}`);
+        setCreateSheetVisible(true);
     };
 
     const handleSaveEvent = async (e: CalendarEvent) => {
@@ -682,8 +682,21 @@ export default function ProfileScreen({ navigation, route }: ProfileScreenProps)
                 />
             )}
 
-            {/* Event Edit Sheet - only for own profile */}
-            {isOwnProfile && isSheetVisible && (
+            {/* Create Event Sheet - for new events */}
+            {isOwnProfile && isCreateSheetVisible && (
+                <View style={styles.sheetOverlay}>
+                    <CreateEventSheet
+                        visible={isCreateSheetVisible}
+                        initialDate={createEventDate}
+                        initialTime={createEventTime}
+                        onClose={() => setCreateSheetVisible(false)}
+                        onSave={handleSaveEvent}
+                    />
+                </View>
+            )}
+
+            {/* Event Edit Sheet - for editing existing events */}
+            {isOwnProfile && isSheetVisible && selectedEvent && (
                 <View style={styles.sheetOverlay}>
                     <EventEditSheet
                         visible={isSheetVisible}

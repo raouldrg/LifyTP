@@ -12,9 +12,11 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "typecheck": "tsc -b",
+    "dev:reset": "bash scripts/dev-reset.sh",
+    "dev:infra": "docker compose up -d",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "dev": "npm run docker:up && concurrently -n api,mobile -c auto \"npm:dev:api\" \"npm:dev:mobile\"",
+    "dev": "echo '\\n⚠️  Multi-terminal workflow required:\\n  1. npm run dev:infra\\n  2. npm run dev:api   (Terminal A)\\n  3. npm run dev:mobile (Terminal B)\\n\\nRun: npm run dev:reset to clean zombie processes\\n'",
     "dev:api": "npm run dev -w @lify/api",
     "dev:mobile": "npm start -w @lify/mobile"
   },
