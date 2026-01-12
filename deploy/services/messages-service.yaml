@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: messages-service
+  namespace: lifytp
+  labels:
+    app: messages-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4102
+    targetPort: 4102
+    protocol: TCP
+    name: http
+  selector:
+    app: messages-service
