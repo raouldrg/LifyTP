@@ -16,7 +16,13 @@ export async function setupSocketIO(app: FastifyInstance) {
   (app as any).io = io;
 
   try {
-    const pubClient = new Redis({ host: "127.0.0.1", port: 6379, lazyConnect: true });
+    // Parse REDIS_URL from environment or use default LifyTP port
+    const redisUrl = process.env.REDIS_URL || "redis://localhost:6380";
+    const url = new URL(redisUrl);
+    const redisHost = url.hostname || "127.0.0.1";
+    const redisPort = parseInt(url.port || "6380", 10);
+
+    const pubClient = new Redis({ host: redisHost, port: redisPort, lazyConnect: true });
     const subClient = pubClient.duplicate();
 
     pubClient.on("error", (err) => app.log.warn(`Redis Pub Error: ${err.message}`));
@@ -27,7 +33,6 @@ export async function setupSocketIO(app: FastifyInstance) {
     io.adapter(createAdapter(pubClient as any, subClient as any));
     app.log.info("✅ Redis Adapter connected");
   } catch (e) {
-    app.log.warn("⚠️ Redis not available, falling back to in-memory Socket.io");
     app.log.warn("⚠️ Redis not available, falling back to in-memory Socket.io");
   }
 

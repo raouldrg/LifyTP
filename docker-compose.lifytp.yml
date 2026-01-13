@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lify
+      POSTGRES_PASSWORD: lify
+      POSTGRES_DB: lify_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - lifytp-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    networks:
+      - lifytp-network
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: lify
+      MINIO_ROOT_PASSWORD: lifypassword
+    command: server /data --console-address ":9001"
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    volumes:
+      - minio:/data
+    networks:
+      - lifytp-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1026:1025"  # SMTP
+      - "8026:8025"  # Web UI
+    networks:
+      - lifytp-network
+
+volumes:
+  pgdata:
+  minio:
+
+networks:
+  lifytp-network:
+    driver: bridge
