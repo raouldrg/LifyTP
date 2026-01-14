@@ -1,124 +1,352 @@
-# Lify - Project Guide
+# 🚀 LifyTP - Application Sociale de Calendrier
 
-> [!IMPORTANT]
-> **LifyTP est isolé du projet Lify original**
-> 
-> Ce projet utilise une configuration Docker dédiée pour éviter tout conflit avec le projet Lify original.
-> - **Fichier Docker** : `docker-compose.lifytp.yml` (et NON `docker-compose.yml`)
-> - **Ports dédiés** : Postgres 5433, Redis 6380, MinIO 9100/9101
-> - **Commandes** : `npm run lifytp:start/stop/clean`
-> 
-> 📖 **[Lire la documentation complète d'isolation](LIFYTP_ISOLATION.md)**
+> Application mobile sociale de gestion d'événements avec messagerie temps réel, déployable en architecture microservices sur Kubernetes.
 
-## 📂 Project Structure
+---
 
-This project is a Monorepo containing the Backend (API) and Frontend (Mobile App).
+## 📋 Table des Matières
 
-- **`apps/api`**: Node.js Backend using **Fastify** and **Prisma** (PostgreSQL).
-  - `src/index.ts`: Entry point.
-  - `src/routes/`: API Endpoints (Auth, Events, Posts, etc.).
-  - `src/lib/`: Shared utilities (Prisma client, Auth guard).
-  - `prisma/schema.prisma`: Database Schema.
+- [Prérequis](#-prérequis)
+- [Structure du Projet](#-structure-du-projet)
+- [Démarrage Rapide](#-démarrage-rapide)
+- [Configuration](#-configuration)
+- [Déploiement Kubernetes](#-déploiement-kubernetes)
+- [CI/CD](#-cicd)
+- [Stack Technique](#-stack-technique)
+- [Développement](#-développement)
 
-- **`apps/mobile`**: React Native App using **Expo**.
-  - `src/navigation/`: App Navigation (Routes, Stacks).
-  - `src/screens/`: UI Screens (Login, Home).
-  - `src/services/`: API clients (Axios) and Socket.io.
-  - `src/context/`: Global State (Auth).
-  - `src/components/`: Shared UI components.
-  - `App.tsx`: Main entry component.
+---
 
-## 🚀 Getting Started
+## 🔧 Prérequis
 
-### 1. Prerequisites
-- Node.js (v18+)
-- Docker (for Database, Redis, MinIO, MailHog)
+| Outil | Version | Vérification |
+|-------|---------|--------------|
+| **Node.js** | v18+ | `node -v` |
+| **Docker** | Latest | `docker -v` |
+| **npm** | v9+ | `npm -v` |
+| **kubectl** | Latest (optionnel) | `kubectl version` |
 
-### 2. Start Infrastructure + API (One Command!)
+---
 
-LifyTP can now start everything (Docker infrastructure + API) with a single command:
+## 📂 Structure du Projet
 
+```
+LifyTP/
+├── apps/
+│   ├── api/                    # Backend monolithique (Fastify + Prisma)
+│   │   ├── prisma/             # Schéma DB et migrations
+│   │   └── src/                # Code source API
+│   └── mobile/                 # App React Native (Expo)
+│       └── src/                # Screens, components, services
+├── services/                   # Microservices (pour K8s)
+│   ├── auth-service/           # Authentification (port 4100)
+│   ├── events-service/         # Événements (port 4101)
+│   ├── messages-service/       # Messagerie (port 4102)
+│   └── shared/                 # Code partagé (Prisma schema)
+├── deploy/                     # Manifests Kubernetes
+│   ├── configmaps/             # ConfigMaps
+│   ├── deployments/            # Deployments
+│   ├── services/               # Services K8s
+│   ├── secrets/                # Templates secrets
+│   └── volumes/                # PVC
+├── scripts/                    # Scripts de démarrage
+├── .github/workflows/          # CI/CD GitHub Actions
+├── docker-compose.lifytp.yml   # Docker Compose (infra locale)
+└── MIGRATION_AND_K8S.md        # Doc architecture microservices + K8s
+```
+
+---
+
+## 🚀 Démarrage Rapide
+
+### Option 1 : Tout en Une Commande (Recommandé)
+
+```bash
+npm run lifytp:dev
+```
+
+Lance automatiquement :
+- ✅ Infrastructure Docker (Postgres, Redis, MinIO, MailHog)
+- ✅ API Backend (port 3000)
+- ✅ App Mobile (Expo)
+
+### Option 2 : Démarrage Séparé
+
+**Terminal 1 - Backend :**
 ```bash
 npm run lifytp:start
 ```
 
-This starts:
-- ✅ Postgres (port 5433)
-- ✅ Redis (port 6380)  
-- ✅ MinIO (ports 9100/9101)
-- ✅ MailHog (ports 1026/8026)
-- ✅ **API Backend (port 3000)** ← NEW!
+**Terminal 2 - Mobile :**
+```bash
+npm run dev:mobile
+```
 
-> [!TIP]
-> **Alternative**: Start EVERYTHING (Infra + API + Mobile) in one terminal:
-> ```bash
-> npm run lifytp:dev
-> ```
+### Arrêt
 
-> [!NOTE]
-> To stop: Press `Ctrl+C` in the terminal, then run `npm run lifytp:stop`
+```bash
+# Arrêter (conserver les données)
+npm run lifytp:stop
+
+# Nettoyer tout (⚠️ supprime les données)
+npm run lifytp:clean
+```
 
 ---
 
-### 3. Choose Backend Mode (Optional)
+## ⚙️ Configuration
 
-LifyTP supports **two backend architectures**:
+### Ports LifyTP (Isolation Complète)
 
-#### Option A: Monolithic API (Default - Just Started!)
-Already running on port 3000 from step 2. You're good to go! ✅
+LifyTP utilise des ports dédiés pour éviter tout conflit avec d'autres projets :
 
-#### Option B: Microservices (For Kubernetes/TP Demo)
-Separate services on ports 4100-4102 (requires Kubernetes).
+| Service | Port LifyTP | Usage |
+|---------|-------------|-------|
+| **Postgres** | 5433 | Base de données |
+| **Redis** | 6380 | Cache/Sessions |
+| **MinIO API** | 9100 | Stockage objets |
+| **MinIO Console** | 9101 | Console MinIO |
+| **MailHog SMTP** | 1026 | Email dev |
+| **MailHog UI** | 8026 | Interface email |
+| **API Monolithique** | 3000 | Backend unifié |
+| **Auth Service** | 4100 | Microservice Auth |
+| **Events Service** | 4101 | Microservice Events |
+| **Messages Service** | 4102 | Microservice Messages |
+
+### Configuration API (.env)
+
+Créer `apps/api/.env` :
+
+```env
+# Database
+DATABASE_URL="postgresql://lify:lify@localhost:5433/lify_dev?schema=public"
+
+# Redis
+REDIS_URL="redis://localhost:6380"
+
+# MinIO
+MINIO_ENDPOINT="localhost"
+MINIO_PORT=9100
+MINIO_ACCESS_KEY="lify"
+MINIO_SECRET_KEY="lifypassword"
+MINIO_USE_SSL=false
+
+# JWT
+JWT_ACCESS_SECRET="your-jwt-access-secret-change-in-production"
+JWT_REFRESH_SECRET="your-jwt-refresh-secret-change-in-production"
+
+# Server
+API_PORT=3000
+NODE_ENV=development
+```
+
+### Mode Backend (Mobile)
+
+L'app mobile peut basculer entre 2 modes :
+
+| Mode | Utilisation | Configuration |
+|------|-------------|---------------|
+| **Monolith** (défaut) | Développement local | 1 seul endpoint (port 3000) |
+| **Microservices** | Démo Kubernetes | 3 endpoints (ports 4100-4102) |
+
+Pour changer de mode, créer `apps/mobile/.env` :
+
+```env
+# Mode Monolith (défaut)
+EXPO_PUBLIC_BACKEND_MODE=monolith
+
+# OU Mode Microservices
+EXPO_PUBLIC_BACKEND_MODE=microservices
+```
+
+---
+
+## ☸️ Déploiement Kubernetes
+
+### Prérequis
+
+- Cluster Kubernetes actif (Docker Desktop K8s ou Minikube)
+- kubectl configuré
+
+### Déploiement Complet
 
 ```bash
-# Port-forward Kubernetes services
+# 1. Créer le namespace
+kubectl apply -f deploy/namespace.yaml
+
+# 2. Créer les secrets (adapter les valeurs)
+kubectl create secret generic db-secret \
+  --from-literal=DATABASE_URL="postgresql://lify:lify@postgres-service:5432/lifytp_dev" \
+  --from-literal=POSTGRES_PASSWORD="lify" \
+  --namespace=lifytp
+
+kubectl create secret generic jwt-secret \
+  --from-literal=JWT_ACCESS_SECRET="your-secret" \
+  --from-literal=JWT_REFRESH_SECRET="your-refresh-secret" \
+  --namespace=lifytp
+
+kubectl create secret generic minio-secret \
+  --from-literal=MINIO_ACCESS_KEY="lify" \
+  --from-literal=MINIO_SECRET_KEY="lifypassword" \
+  --namespace=lifytp
+
+# 3. Déployer l'infrastructure
+kubectl apply -f deploy/configmaps/
+kubectl apply -f deploy/volumes/
+kubectl apply -f deploy/deployments/
+kubectl apply -f deploy/services/
+
+# 4. Vérifier le déploiement
+kubectl get pods -n lifytp
+kubectl get svc -n lifytp
+```
+
+### Accès Local aux Services (port-forward)
+
+```bash
 kubectl port-forward -n lifytp service/auth-service 4100:4100 &
 kubectl port-forward -n lifytp service/events-service 4101:4101 &
 kubectl port-forward -n lifytp service/messages-service 4102:4102 &
 ```
 
-> [!NOTE]
-> **To switch between modes**: Create `apps/mobile/.env` with:
-> - `EXPO_PUBLIC_BACKEND_MODE=monolith` (default)
-> - `EXPO_PUBLIC_BACKEND_MODE=microservices` (Kubernetes demo)
-> 
-> 📖 **[Full backend configuration guide](FRONTEND_BACKEND_CONFIG.md)**
+### Commandes Utiles
+
+```bash
+# Voir tous les objets
+kubectl get all -n lifytp
+
+# Logs d'un service
+kubectl logs -f deployment/auth-service -n lifytp
+
+# Décrire un pod
+kubectl describe pod <pod-name> -n lifytp
+
+# Supprimer tout
+kubectl delete namespace lifytp
+```
+
+> 📖 **Documentation complète K8s :** Voir [MIGRATION_AND_K8S.md](MIGRATION_AND_K8S.md)
 
 ---
 
-### 4. Start Mobile App
-The mobile app runs on Expo.
+## 🔄 CI/CD
+
+### Workflow CI (develop)
+
+**Trigger :** Push/PR sur `develop`
+
+**Étapes :**
+1. Lint code
+2. Type check TypeScript
+3. Build des 3 microservices
+
+**Fichier :** [`.github/workflows/ci-develop.yml`](.github/workflows/ci-develop.yml)
+
+### Workflow CD (production)
+
+**Trigger :** Push d'un tag `v*` (ex: `v1.0.0`)
+
+**Étapes :**
+1. Build des images Docker
+2. Push vers GitHub Container Registry (GHCR)
+3. Déploiement sur Kubernetes
+
+**Fichier :** [`.github/workflows/cd-main.yml`](.github/workflows/cd-main.yml)
+
+### Créer une Release
+
 ```bash
-# In a NEW terminal
-cd apps/mobile
-npm start
+# Créer et pousser un tag
+git tag v1.0.0
+git push origin v1.0.0
+
+# Le CD se déclenche automatiquement
 ```
-- Press `i` to open in iOS Simulator.
-- Press `a` to open in Android Emulator.
 
-## 🔑 Development Credentials
+---
 
-We have a **Mock Authentication** system for development ease.
+## 🛠 Stack Technique
 
-- **Login Endpoint**: `POST /dev/mock-login` (Automatically used by the Mobile App).
-- **Default Test Account**:
-  - **Email**: `test@lify.app`
-  - **Password**: (No password required for mock login)
+### Backend
 
-## 🛠 Tech Stack Details
+| Composant | Technologie |
+|-----------|-------------|
+| Framework | Fastify |
+| ORM | Prisma |
+| Database | PostgreSQL 16 |
+| Cache | Redis 7 |
+| Storage | MinIO (S3-compatible) |
+| Auth | JWT + bcrypt |
+| Realtime | Socket.io |
 
-- **Backend**:
-  - Framework: Fastify
-  - ORM: Prisma
-  - Database: PostgreSQL
-  - Storage: Minio (S3 compatible)
-  - Realtime: Socket.io
+### Frontend Mobile
 
-- **Frontend**:
-  - Framework: React Native (Expo)
-  - Navigation: React Navigation
-  - HTTP Client: Axios
+| Composant | Technologie |
+|-----------|-------------|
+| Framework | React Native (Expo) |
+| Navigation | React Navigation |
+| HTTP | Axios |
+| Realtime | Socket.io-client |
+| Animations | Reanimated |
 
-## 📝 Notes
-- Use `npx prisma studio` in `apps/api` to browse the database visually.
-- The `Minio` connection is optional for development; the server will warn but not crash if it's down.
+### DevOps
+
+| Composant | Technologie |
+|-----------|-------------|
+| Containers | Docker |
+| Orchestration | Kubernetes |
+| CI/CD | GitHub Actions |
+| Registry | GHCR |
+
+---
+
+## 💻 Développement
+
+### Commandes Disponibles
+
+| Commande | Description |
+|----------|-------------|
+| `npm run lifytp:start` | Démarre infra + API |
+| `npm run lifytp:dev` | Démarre tout (infra + API + mobile) |
+| `npm run lifytp:stop` | Arrête Docker |
+| `npm run lifytp:clean` | Nettoie tout (données incluses) |
+| `npm run lifytp:logs` | Logs Docker |
+| `npm run dev:api` | API seule |
+| `npm run dev:mobile` | Mobile seul |
+| `npm run lint` | Lint du projet |
+| `npm run typecheck` | Vérification TypeScript |
+
+### Identifiants de Développement
+
+| Service | User | Password |
+|---------|------|----------|
+| **PostgreSQL** | lify | lify |
+| **MinIO** | lify | lifypassword |
+| **App (mock login)** | test@lify.app | (aucun) |
+
+### Base de Données (Prisma)
+
+```bash
+# Ouvrir Prisma Studio
+cd apps/api
+npx prisma studio
+
+# Appliquer les migrations
+npx prisma migrate dev
+
+# Générer le client
+npx prisma generate
+```
+
+---
+
+## 📚 Documentation Additionnelle
+
+- **[MIGRATION_AND_K8S.md](MIGRATION_AND_K8S.md)** - Architecture microservices et déploiement Kubernetes détaillé
+- **[archive/docs/](archive/docs/)** - Documentation archivée (analyses, roadmaps, rapports)
+
+---
+
+## 📝 Licence
+
+Projet académique - LifyTP
